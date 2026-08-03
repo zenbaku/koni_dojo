@@ -13,7 +13,7 @@ export default defineConfig({
       logo: { src: './src/assets/koni_dojo_icon.png', alt: 'Dojo' },
       favicon: '/favicon.png',
       description:
-        "Dojo (the koni_dojo package) — the declarative source engine and curation pipeline behind Konimanga's manga sources.",
+        'Dojo (the koni_dojo package) — a pure-Dart engine that turns a JSON config into a live HTML or JSON-API scraping source, with no per-site code.',
       social: [
         {
           icon: 'github',

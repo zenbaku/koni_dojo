@@ -1,4 +1,4 @@
-// Konimanga source playground: a Flutter *desktop* workbench over one or
+// Dojo source playground: a Flutter *desktop* workbench over one or
 // more workspaces (source collections), aimed at extension developers: open a
 // workspace directory, see every source (active / dormant) in one sortable
 // table with catalog status and live probe results, switch between registered
@@ -61,7 +61,7 @@ class PlaygroundApp extends StatelessWidget {
     // The tooling's signature warm-amber accent.
     const seed = Color(0xFFB06F1F);
     return MaterialApp(
-      title: 'Konimanga Source Playground',
+      title: 'Dojo Source Playground',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.light),
       darkTheme: ThemeData(colorSchemeSeed: seed, brightness: Brightness.dark),
@@ -95,7 +95,7 @@ class WelcomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Konimanga Source Playground',
+              'Dojo Source Playground',
               style: theme.textTheme.headlineSmall,
             ),
             const SizedBox(height: 8),

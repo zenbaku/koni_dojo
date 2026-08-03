@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zenbaku.github.io/koni_dojo/source-config.schema.json",
   "x-engineVersion": "0.2.0",
-  "title": "Konimanga extension file",
+  "title": "Dojo extension file",
   "description": "An extensions/*.json file: one extension's metadata plus its source(s). Mirrors lib/src/extension_models.dart (the authoritative model) and docs/extensions.md (the prose walkthrough). x-engineVersion is the koni_dojo package version (see pubspec.yaml) this schema was last verified against — bump both together whenever the schema's shape changes; test/schema_sync_test.dart checks this file's properties against every config class's actual toJson() field set, so a Dart-side field with no matching schema entry (or vice versa) fails the test suite instead of silently shipping.",
   "type": "object",
   "required": ["name", "pkg", "version", "sources"],
