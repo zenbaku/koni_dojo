@@ -1,0 +1,34 @@
+# Keep the published package lean: ship the library, example, and metadata —
+# not the contributor tooling.
+#
+# IMPORTANT: pub uses this file *instead of* .gitignore for this directory,
+# not in addition to it. Every root .gitignore rule that should also apply to
+# the published archive has to be repeated below — the earlier "additive to
+# .gitignore" assumption is why the 0.2.0 archive shipped build/ (two 8 MB
+# .dill caches) and coverage/lcov.info.
+
+# --- Mirrors .gitignore (see note above) ---
+.dart_tool/
+.packages
+build/
+coverage/
+pubspec.lock
+.DS_Store
+workspaces/
+
+# --- Contributor tooling: not needed to consume the library ---
+playground/
+docs-site/
+docs/
+tool/
+test/
+.github/
+Taskfile.yml
+
+# The Flutter/plugin-dependent transport is its own package (`publish_to:
+# none`), consumed by apps through a path dependency — never resolved from
+# this archive, so shipping it here is dead weight.
+webview/
+
+# koni_dojo_icon.png is deliberately NOT excluded: README.md embeds it with a
+# relative path, which pub.dev resolves against the archive.

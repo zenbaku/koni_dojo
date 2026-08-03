@@ -1,0 +1,136 @@
+{
+  "name": "Delta",
+  "pkg": "app.konimanga.extension.en.delta",
+  "version": "1.0.0",
+  "lang": "en",
+  "nsfw": 0,
+  "sources": [
+    {
+      "type": "api",
+      "id": "delta",
+      "name": "Delta",
+      "lang": "en",
+      "baseUrl": "https://delta.example",
+      "apiUrl": "https://api.delta.example",
+      "headers": {
+        "User-Agent": "Konimanga/0.1"
+      },
+      "manga": {
+        "url": "id",
+        "title": {
+          "paths": [
+            "attributes.title.{lang}",
+            "attributes.title.en",
+            "attributes.title.*"
+          ],
+          "default": "Untitled"
+        },
+        "description": {
+          "paths": [
+            "attributes.description.{lang}",
+            "attributes.description.en"
+          ]
+        },
+        "author": "relationships[type=author].attributes.name",
+        "cover": {
+          "path": "relationships[type=cover_art].attributes.fileName",
+          "template": "https://cdn.delta.example/covers/{id}/{value}.jpg"
+        },
+        "genres": {
+          "items": "attributes.tags",
+          "value": {
+            "paths": [
+              "attributes.name.en",
+              "attributes.name.*"
+            ]
+          }
+        }
+      },
+      "popular": {
+        "path": "/titles?limit=20&offset={offset}&order[followedCount]=desc&availableTranslatedLanguage[]={lang}&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive",
+        "pageSize": 20,
+        "items": "data",
+        "totalPath": "total"
+      },
+      "search": {
+        "path": "/titles?limit=20&offset={offset}&title={query}&order[followedCount]=desc&availableTranslatedLanguage[]={lang}&includes[]=cover_art&includes[]=author&contentRating[]=safe&contentRating[]=suggestive",
+        "pageSize": 20,
+        "items": "data",
+        "totalPath": "total"
+      },
+      "details": {
+        "path": "/titles/{url}?includes[]=cover_art&includes[]=author",
+        "item": "data"
+      },
+      "chapters": {
+        "path": "/titles/{url}/chapters?limit=100&offset={offset}&translatedLanguage[]={lang}&order[chapter]=asc&order[volume]=asc&contentRating[]=safe&contentRating[]=suggestive",
+        "pageSize": 100,
+        "maxItems": 1000,
+        "items": "data",
+        "totalPath": "total",
+        "chapter": {
+          "url": "id",
+          "skipIf": "attributes.externalUrl",
+          "number": "attributes.chapter",
+          "date": "attributes.publishAt",
+          "name": {
+            "parts": [
+              {
+                "path": "attributes.volume",
+                "template": "Vol. {value}"
+              },
+              {
+                "path": "attributes.chapter",
+                "template": "Ch. {value}"
+              },
+              {
+                "path": "attributes.title"
+              }
+            ],
+            "join": " ",
+            "default": "Oneshot"
+          }
+        }
+      },
+      "pages": {
+        "path": "/pages/{url}",
+        "items": "chapter.data",
+        "template": "{baseUrl}/data/{chapter.hash}/{value}"
+      },
+      "filters": [
+        {
+          "id": "tags",
+          "name": "Tags",
+          "param": "includedTags[]",
+          "excludeParam": "excludedTags[]",
+          "optionsFrom": {
+            "path": "/titles/tags",
+            "items": "data",
+            "value": "id",
+            "label": {
+              "paths": [
+                "attributes.name.en",
+                "attributes.name.*"
+              ]
+            },
+            "groupBy": {
+              "path": "attributes.group",
+              "names": {
+                "genre": "Genres",
+                "theme": "Themes",
+                "format": "Formats",
+                "content": "Content warnings"
+              },
+              "order": [
+                "genre",
+                "theme",
+                "format",
+                "content"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

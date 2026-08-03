@@ -1,0 +1,55 @@
+# The engine's own CI gate — mirrors `task check` (analyze + test), which
+# needs only the Dart SDK (no Flutter, no app checkout, no workspace). Runs
+# on every push/PR so a break is caught automatically instead of only when
+# someone remembers to run `task check` locally.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - run: dart pub get
+      - run: dart analyze
+      - run: dart test
+
+  webview-check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: flutter pub get (webview/)
+        working-directory: webview
+        run: flutter pub get
+      - name: flutter analyze (webview/)
+        working-directory: webview
+        run: flutter analyze
+      - name: flutter test (webview/)
+        working-directory: webview
+        run: flutter test
+
+  playground-check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: flutter pub get (playground/)
+        working-directory: playground
+        run: flutter pub get
+      - name: flutter analyze (playground/)
+        working-directory: playground
+        run: flutter analyze
+      - name: flutter test (playground/)
+        working-directory: playground
+        run: flutter test

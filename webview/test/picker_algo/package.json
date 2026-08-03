@@ -1,0 +1,11 @@
+{
+  "name": "picker_algo_test",
+  "private": true,
+  "description": "Headless jsdom test for the element-picker's selector-generation algorithm, embedded as a JS string in ../../lib/koni_dojo_webview.dart's _pickerScript constant. Not Dart because the algorithm needs a live DOM at click time — the one deliberate exception to this project's Dart-only tooling norm, scoped to this single file. Not wired into `task check`; run manually (`npm install && npm test`) after touching the picker-algo:start/end block in koni_dojo_webview.dart.",
+  "scripts": {
+    "test": "node picker-algo.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^29.0.0"
+  }
+}

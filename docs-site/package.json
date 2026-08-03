@@ -1,0 +1,20 @@
+{
+  "name": "koni-dojo-docs",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Documentation site for koni_dojo (Astro Starlight). Isolated Node toolchain \u2014 does not touch the Dart package.",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "prebuild": "cp ../docs/source-config.schema.json public/",
+    "predev": "cp ../docs/source-config.schema.json public/"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.41.3",
+    "astro": "^7.0.7",
+    "sharp": "^0.33.5"
+  }
+}

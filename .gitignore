@@ -1,0 +1,30 @@
+# Dart/Flutter tooling
+.dart_tool/
+.packages
+build/
+pubspec.lock
+
+# Coverage output (`dart test --coverage` / `flutter test --coverage`) —
+# regenerated per run, never reviewed as source.
+coverage/
+
+# OS
+.DS_Store
+
+# Docs site (Astro Starlight — isolated Node toolchain)
+docs-site/node_modules/
+docs-site/dist/
+docs-site/.astro/
+
+# Picker-algo test (jsdom — the one Dart-only-tooling exception, scoped to
+# this file; see webview/test/picker_algo/package.json)
+webview/test/picker_algo/node_modules/
+
+# Source collections (data) live in their own repo (koni_dojo_repo), never here.
+# A local workspace checkout for dev is fine but never committed.
+workspaces/
+
+# Copied in at build time from docs/ (see docs-site/package.json prebuild) so
+# the JSON Schema is served at the URL its own $id claims. Single source of
+# truth stays docs/source-config.schema.json.
+docs-site/public/source-config.schema.json

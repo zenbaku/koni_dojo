@@ -1,0 +1,118 @@
+# Common dev commands for this package: https://taskfile.dev (brew install go-task)
+#
+# Self-contained: every task here only needs the Dart SDK (no Flutter, no app
+# checkout), except `playground` (Flutter) and `docs`/`docs-build` (Node),
+# each an isolated toolchain corner. Run from this directory.
+#
+# WORKSPACES: a workspace is a source collection (the *data*), which lives in
+# its own repo, NOT here. Data-facing tasks take WORKSPACE, defaulting to the
+# sibling ../koni_dojo_repo; override it for another collection, e.g.
+#   task build-repo WORKSPACE=/path/to/some/workspace
+# See tool/workspace.dart and https://zenbaku.github.io/koni_dojo/.
+version: '3'
+
+vars:
+  WORKSPACE: '{{.WORKSPACE | default "../koni_dojo_repo"}}'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+    silent: true
+
+  deps:
+    desc: Install dependencies
+    cmds:
+      - dart pub get
+
+  setup:
+    desc: 'Bootstrap a fresh clone: install deps + build the repo index.'
+    cmds:
+      - task: deps
+      - task: build-repo
+
+  clean:
+    desc: Remove local build state (.dart_tool, build/, pubspec.lock).
+    cmds:
+      - rm -rf .dart_tool build pubspec.lock
+
+  analyze:
+    desc: Lint the package (package:lints/recommended)
+    cmds:
+      - dart analyze
+
+  test:
+    desc: Run all tests
+    cmds:
+      - dart test
+
+  check:
+    desc: 'The pre-commit/CI gate: analyze + test.'
+    cmds:
+      - task: analyze
+      - task: test
+
+  check-workspace:
+    desc: Verify a workspace's built index is up to date with its extensions/*.json.
+    cmds:
+      - dart run tool/build_repo.dart --workspace {{.WORKSPACE}} --check
+
+  probe:
+    desc: 'Live-probe one source config against its real site. Pass the path after --.'
+    cmds:
+      - dart run tool/live_probe.dart {{.CLI_ARGS}}
+
+  probe-pipeline:
+    desc: Live smoke test of the pipeline engine's cross-format two-phase capability.
+    cmds:
+      - dart run tool/pipeline_live_probe.dart
+
+  build-repo:
+    desc: Validate a workspace's configs through the engine and rebuild repo/index.min.json.
+    cmds:
+      - dart run tool/build_repo.dart --workspace {{.WORKSPACE}}
+
+  capture-icons:
+    desc: 'Fetch a site icon per config into extensions/icons/ (skips existing; -- --force to refetch).'
+    cmds:
+      - dart run tool/capture_icons.dart --workspace {{.WORKSPACE}} {{.CLI_ARGS}}
+
+  serve:
+    desc: LAN-serve a workspace's repo/ so a device on the same Wi-Fi can install it.
+    # This machine's IP: ipconfig getifaddr en0. Install URL is http://<ip>:<port>/index.min.json
+    cmds:
+      - dart run tool/serve_repo.dart --workspace {{.WORKSPACE}}
+
+  publish:
+    desc: Deploy a workspace's repo/ to its Cloudflare Pages project (manifest publish.cfProject).
+    # One-time: npx wrangler login && npx wrangler pages project create <name>
+    cmds:
+      - dart run tool/publish_repo.dart --workspace {{.WORKSPACE}}
+
+  serve-repo:
+    desc: 'Deprecated alias for `serve` (kept for muscle memory).'
+    cmds:
+      - task: serve
+
+  publish-repo:
+    desc: 'Deprecated alias for `publish` (kept for muscle memory).'
+    cmds:
+      - task: publish
+
+  playground:
+    desc: Run the Flutter desktop config workbench (playground/). Needs Flutter.
+    dir: playground
+    cmds:
+      - flutter run {{.CLI_ARGS}}
+
+  docs:
+    desc: Run the docs site (docs-site/) live-reload dev server. Needs Node (npm install first).
+    dir: docs-site
+    cmds:
+      - npm run dev
+
+  docs-build:
+    desc: Static-build the docs site into docs-site/dist/. Needs Node (npm install first).
+    dir: docs-site
+    cmds:
+      - npm run build

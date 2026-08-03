@@ -1,0 +1,44 @@
+name: konimanga_playground
+description: >-
+  Desktop playground for koni_dojo extension developers — edit a
+  declarative source config and live-probe it (popular → details → chapters →
+  pages) with stage-by-stage results and pipeline traces. Flutter lives only
+  here; the engine package itself stays pure Dart.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  koni_dojo:
+    path: ../
+  koni_dojo_webview:
+    path: ../webview
+  http: ^1.2.2
+  file_selector: ^1.0.3
+  html: ^0.15.4 # same HTML/CSS-selector engine the config engine uses
+  flutter_js: ^0.8.0 # QuickJS runtime for `js` pipeline steps
+  sqlite3: ^2.4.0 # probe history + captured request/response examples
+  sqlite3_flutter_libs: ^0.5.0 # bundles the sqlite3 native library
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+flutter_launcher_icons:
+  image_path: playground_logo.png
+  macos:
+    generate: true
+    image_path: playground_logo.png
+  windows:
+    generate: true
+    image_path: playground_logo.png
+    icon_size: 256

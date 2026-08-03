@@ -1,0 +1,43 @@
+# Builds the Astro Starlight docs site (docs-site/) and deploys it to GitHub
+# Pages. One-time setup: repo Settings → Pages → Source = "GitHub Actions".
+# The site is served at https://zenbaku.github.io/koni_dojo/.
+name: Deploy docs site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; don't cancel an in-progress run.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # withastro/action installs deps, builds, and uploads the Pages artifact.
+      - uses: withastro/action@v3
+        with:
+          path: docs-site
+          node-version: 22    # Astro now requires Node >=22.12.0
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

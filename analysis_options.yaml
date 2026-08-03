@@ -1,0 +1,14 @@
+include: package:lints/recommended.yaml
+
+# The root package is the pure-Dart engine (lib/, test/, tool/, example/),
+# analyzed with only the Dart SDK by `task check` and CI's `check` job.
+# playground/ and webview/ are separate Flutter packages (their own pubspecs
+# and analysis_options); excluding them keeps their `package:flutter/...`
+# imports out of the SDK-only analyze, which otherwise fails without a
+# `flutter pub get`. webview/ has its own CI job (`webview-check`); the
+# playground is analyzed on its own.
+analyzer:
+  exclude:
+    - playground/**
+    - webview/**
+    - build/**

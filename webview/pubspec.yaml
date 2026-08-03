@@ -1,0 +1,29 @@
+name: koni_dojo_webview
+description: >-
+  flutter_inappwebview-backed WebViewFetcher, two-stage Cloudflare solver
+  (headless → visible), and challenge-detection heuristic for koni_dojo's
+  `webview: true` sources. The concrete, Flutter/plugin-dependent transport
+  the pure-Dart engine deliberately can't include itself — shared by every
+  app that needs it (playground, konimanga) instead of each maintaining its
+  own copy.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  koni_dojo:
+    path: ../
+  flutter_inappwebview: ^6.0.0
+  html: ^0.15.4
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

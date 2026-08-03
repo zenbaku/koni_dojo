@@ -1,0 +1,721 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zenbaku.github.io/koni_dojo/source-config.schema.json",
+  "x-engineVersion": "0.2.0",
+  "title": "Konimanga extension file",
+  "description": "An extensions/*.json file: one extension's metadata plus its source(s). Mirrors lib/src/extension_models.dart (the authoritative model) and docs/extensions.md (the prose walkthrough). x-engineVersion is the koni_dojo package version (see pubspec.yaml) this schema was last verified against — bump both together whenever the schema's shape changes; test/schema_sync_test.dart checks this file's properties against every config class's actual toJson() field set, so a Dart-side field with no matching schema entry (or vice versa) fails the test suite instead of silently shipping.",
+  "type": "object",
+  "required": ["name", "pkg", "version", "sources"],
+  "properties": {
+    "name": { "type": "string", "description": "Display name of the extension." },
+    "pkg": {
+      "type": "string",
+      "description": "Unique package-style identifier, e.g. app.konimanga.extension.en.example."
+    },
+    "version": {
+      "type": "string",
+      "description": "Not hand-authored semver — an opaque content identifier (a truncated SHA-256 of the curated file's raw bytes) stamped in by tool/build_repo.dart at build time. Carries no ordering; an app's update check is a plain inequality against the installed copy, never \"is this greater than\"."
+    },
+    "updatedAt": {
+      "type": "string",
+      "description": "The curated file's last-changed date (YYYY-MM-DD, from git log), stamped in alongside version by tool/build_repo.dart — a human-readable companion to it, not a second source of truth. version is what actually answers \"is this different\"; this is best-effort decoration for \"updated {date}\" UI copy. Never hand-authored."
+    },
+    "lang": { "type": "string", "default": "all" },
+    "nsfw": {
+      "description": "0/1 (or a bool) — whether the extension is 18+.",
+      "oneOf": [{ "type": "integer", "enum": [0, 1] }, { "type": "boolean" }]
+    },
+    "sources": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/source" }
+    }
+  },
+
+  "$defs": {
+    "source": {
+      "description": "One source, discriminated by `type`: absent/anything else is the HTML dialect (sourceConfig); \"api\" is the JSON-API dialect (apiSourceConfig).",
+      "oneOf": [{ "$ref": "#/$defs/apiSourceConfig" }, { "$ref": "#/$defs/sourceConfig" }]
+    },
+
+    "sourceConfig": {
+      "title": "HTML source (SourceConfig)",
+      "type": "object",
+      "additionalProperties": false,
+      "not": { "required": ["type"] },
+      "required": ["id", "name", "baseUrl", "popular", "chapters", "pages"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "lang": { "type": "string", "default": "all" },
+        "baseUrl": { "type": "string", "format": "uri" },
+        "icon": {
+          "type": "string",
+          "description": "A data:image/png;base64,… URI (inlined by tool/build_repo.dart from extensions/icons/) or an http(s) URL. Not usually hand-authored."
+        },
+        "webview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Route this source's page GETs through the app's WebView (real browser fingerprint + Cloudflare clearance) instead of the HTTP client — for hosts whose Cloudflare mode re-challenges cookie-replay from a non-browser client."
+        },
+        "warmImageByUrl": {
+          "type": "boolean",
+          "default": false,
+          "description": "For a webview source: when warming a cover/page image's origin before fetching its bytes, navigate to the image's own URL instead of its bare origin. Default (false) is what most sites need. A handful of CDN-only hosts (no real page at \"/\") WAF-block a bare root-path request outright while serving the actual asset path with no challenge at all, and need this set to true."
+        },
+        "warmImageViaImgTag": {
+          "type": "boolean",
+          "default": false,
+          "description": "For a webview source: fetch cover/page image bytes by navigating to (or reusing) a page at this source's own baseUrl, then injecting a same-page <img crossorigin=\"anonymous\"> for the image URL and reading it back via canvas — instead of warmImageByUrl's direct navigation to the image's own URL/origin. Recovers two failures warmImageByUrl can't: a WAF whose Referer check wants the site's own origin specifically (not the image host's), or a CDN that mislabels real image bytes with a non-image Content-Type (breaking the browser's own image-document rendering that warmImageByUrl's canvas extraction depends on). Needs the CDN's Access-Control-Allow-Origin to permit the canvas read. Takes precedence over warmImageByUrl when both are set."
+        },
+        "js": {
+          "type": "boolean",
+          "default": false,
+          "description": "Opt-in to running `js` pipeline steps (sandboxed QuickJS) — required by any config using a `js` step; tool/build_repo.dart enforces it."
+        },
+        "loginUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Absolute URL of this source's own login page — gates whether the app offers a \"log in\" action for it; absent means no login concept. Purely a UI trigger for the app's WebView-based login capture; the engine never fetches this URL or knows what \"logged in\" means. Meaningful only alongside webview: true."
+        },
+        "localStorageSeed": {
+          "type": "object",
+          "description": "For a webview source: key -> JSON value entries to seed into the WebView's localStorage for this source's origin, once per process, before the first real fetch there — for a purely client-side gate (an age/content-warning interstitial) that blocks real content but isn't session state."
+        },
+        "localStoragePreferences": {
+          "type": "array",
+          "description": "User-facing consent toggles that patch localStorageSeed at fetch time, for a preference that shouldn't be forced the same way for everyone.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label", "seedKey", "path"],
+            "properties": {
+              "id": { "type": "string", "description": "Stable identifier — the key a LocalStoragePreferenceStore stores this toggle's override under." },
+              "label": { "type": "string", "description": "User-facing label for this toggle's control." },
+              "seedKey": { "type": "string", "description": "Top-level key within localStorageSeed this toggle writes into." },
+              "path": { "type": "array", "items": { "type": "string" }, "description": "Path of nested keys under seedKey to the boolean this toggle writes." },
+              "default": { "type": "boolean", "default": false }
+            }
+          }
+        },
+        "headers": { "$ref": "#/$defs/stringMap" },
+        "rateLimit": { "$ref": "#/$defs/rateLimit" },
+        "popular": { "$ref": "#/$defs/listing" },
+        "latest": { "$ref": "#/$defs/listing" },
+        "search": { "$ref": "#/$defs/listing" },
+        "tag": {
+          "$ref": "#/$defs/listing",
+          "description": "Exact-match browse for one or more already-known tag values (e.g. a value out of details.genres) — its own precise listing endpoint, distinct from search's free-text relevance ranking. For sites whose tags are too numerous to enumerate as filter options (one per model/publisher, not a small curated taxonomy). tagParam/tagExcludeParam declare multi-tag/exclusion support; unset means the source only browses one tag at a time via {query} in path."
+        },
+        "details": { "$ref": "#/$defs/details" },
+        "chapters": { "$ref": "#/$defs/chapters" },
+        "pages": { "$ref": "#/$defs/pages" },
+        "filters": { "type": "array", "items": { "$ref": "#/$defs/filter" } }
+      }
+    },
+
+    "apiSourceConfig": {
+      "title": "JSON-API source (ApiSourceConfig)",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "name", "baseUrl", "apiUrl", "popular", "chapters", "pages"],
+      "properties": {
+        "type": { "const": "api" },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "lang": { "type": "string", "default": "all" },
+        "baseUrl": { "type": "string", "format": "uri" },
+        "apiUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "Root the listing/details/chapters/pages paths resolve against."
+        },
+        "icon": { "type": "string" },
+        "headers": { "$ref": "#/$defs/stringMap" },
+        "imageHeaders": {
+          "$ref": "#/$defs/stringMap",
+          "description": "Headers for fetching covers and pages; API CDNs usually need none."
+        },
+        "rateLimit": { "$ref": "#/$defs/rateLimit" },
+        "manga": { "$ref": "#/$defs/apiMangaSpec" },
+        "popular": { "$ref": "#/$defs/apiListing" },
+        "search": { "$ref": "#/$defs/apiListing" },
+        "tag": {
+          "$ref": "#/$defs/apiListing",
+          "description": "Exact-match browse for one or more already-known tag values — same idea as the HTML dialect's tag listing, using apiListing's tagParam/tagExcludeParam/tagJoin."
+        },
+        "details": { "$ref": "#/$defs/apiDetails" },
+        "chapters": { "$ref": "#/$defs/apiChapters" },
+        "pages": { "$ref": "#/$defs/apiPages" },
+        "filters": { "type": "array", "items": { "$ref": "#/$defs/filter" } }
+      }
+    },
+
+    "stringMap": { "type": "object", "additionalProperties": { "type": "string" } },
+
+    "rateLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "integer", "default": 1 },
+        "perMs": { "type": "integer", "default": 1000 }
+      }
+    },
+
+    "valueRewrite": {
+      "description": "find replaces literally; pattern is a regex whose replacement may reference groups as $1..$9. find wins when both are given.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "find": { "type": "string" },
+        "pattern": { "type": "string" },
+        "replace": { "type": "string" }
+      }
+    },
+
+    "coverSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selector": { "type": "string" },
+        "attr": { "type": "string", "default": "src" },
+        "replace": { "$ref": "#/$defs/valueRewrite" }
+      }
+    },
+
+    "coverChain": {
+      "description": "Multi-step cover extraction; the first step yielding a non-empty value (after its rewrite) wins.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/coverSource" }
+    },
+
+    "requestTransform": {
+      "description": "Derives the URL actually fetched from the stored one: an optional regex rewrite, then an optional literal suffix. Or an explicit url/method/body/headers request (optionally two-phase via idSelector/idAttr).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pattern": { "type": "string" },
+        "replace": { "type": "string" },
+        "suffix": { "type": "string" },
+        "url": { "type": "string" },
+        "method": { "type": "string", "enum": ["GET", "POST"], "default": "GET" },
+        "body": { "type": "string" },
+        "headers": { "$ref": "#/$defs/stringMap" },
+        "idSelector": { "type": "string" },
+        "idAttr": { "type": "string" }
+      }
+    },
+
+    "rowField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label"],
+      "properties": {
+        "label": {
+          "description": "Rows whose label contains any of these (case-insensitive) contribute every valueSelector match.",
+          "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+        },
+        "valueSelector": { "type": "string" },
+        "join": { "type": "string", "default": ", " }
+      }
+    },
+
+    "rows": {
+      "description": "Declarative extraction of <li><strong>Label:</strong> value</li>-style metadata rows.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemSelector"],
+      "properties": {
+        "itemSelector": { "type": "string" },
+        "labelSelector": { "type": "string", "default": "strong" },
+        "fields": {
+          "type": "object",
+          "description": "Keyed by the manga field to fill: author, status, genres or description.",
+          "additionalProperties": { "$ref": "#/$defs/rowField" }
+        }
+      }
+    },
+
+    "filterOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value"],
+      "properties": {
+        "value": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+
+    "groupBy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string" },
+        "names": { "$ref": "#/$defs/stringMap" },
+        "order": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+
+    "optionsFrom": {
+      "description": "Discovers a filter group's option list from the source at runtime; the static options[] then serve as a fallback.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string" },
+        "items": { "type": "string", "default": "data" },
+        "value": { "$ref": "#/$defs/jsonValueSpec" },
+        "label": { "$ref": "#/$defs/jsonValueSpec" },
+        "groupBy": { "$ref": "#/$defs/groupBy" },
+        "itemSelector": { "type": "string" },
+        "valueAttr": { "type": "string", "default": "value" },
+        "labelSelector": { "type": "string" },
+        "labelAttr": { "type": "string" }
+      }
+    },
+
+    "filter": {
+      "description": "A declarative search filter group: the user's selected options are appended to the search listing's URL as query parameters.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "param"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "param": { "type": "string", "description": "Query parameter carrying included options." },
+        "excludeParam": { "type": "string", "description": "Enables exclusion when set." },
+        "join": {
+          "type": "string",
+          "description": "'' repeats the parameter (?g=a&g=b); any other string joins values into one (?g=a,b)."
+        },
+        "options": { "type": "array", "items": { "$ref": "#/$defs/filterOption" } },
+        "optionsFrom": { "$ref": "#/$defs/optionsFrom" }
+      }
+    },
+
+    "listing": {
+      "title": "ListingConfig (popular/latest/search/tag)",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "{page}, {offset} (= (page-1)*pageSize) and {query} are substituted. Empty only when steps supplies the extraction. For tag, {query} substitutes the first included value and is path-segment escaped (spaces as %20) rather than query-string escaped (spaces as +), since a tag value there typically sits in the URL path itself."
+        },
+        "pageSize": { "type": "integer", "description": "Items per page, used only to compute {offset}." },
+        "queryReplace": { "$ref": "#/$defs/valueRewrite" },
+        "queryMap": {
+          "$ref": "#/$defs/stringMap",
+          "description": "Case-insensitive exact-match rewrite of the raw query, checked before queryReplace — for a fixed vocabulary (e.g. a tag/genre label) whose site-side browse value doesn't derive from its display text by any rule. A query that isn't a key falls through unchanged."
+        },
+        "method": { "type": "string", "enum": ["GET", "POST"], "default": "GET" },
+        "body": { "type": "string" },
+        "headers": { "$ref": "#/$defs/stringMap" },
+        "itemSelector": { "type": "string" },
+        "titleSelector": { "type": "string", "default": "a" },
+        "titleAttr": { "type": "string" },
+        "urlSelector": { "type": "string", "default": "a" },
+        "urlAttr": { "type": "string", "default": "href" },
+        "coverSelector": { "type": "string", "default": "img" },
+        "coverAttr": { "type": "string", "default": "src" },
+        "cover": { "$ref": "#/$defs/coverChain" },
+        "nextPageSelector": { "type": "string" },
+        "tagParam": {
+          "type": "string",
+          "description": "Meaningful only on tag: query parameter carrying every included tag value (not just the extras beyond the first). Unset means the source can only browse one tag at a time via {query} in path — TagCapabilities.multiple is derived from this being set, not hand-declared."
+        },
+        "tagExcludeParam": {
+          "type": "string",
+          "description": "Meaningful only on tag: query parameter carrying excluded tag values. Unset means the source can't exclude a tag — TagCapabilities.exclusion is derived from this being set."
+        },
+        "tagJoin": {
+          "type": "string",
+          "description": "How tagParam/tagExcludeParam serialize multiple values: unset repeats the parameter (?tag=a&tag=b), any other string joins them into one value (?tag=a,b)."
+        },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "details": {
+      "title": "DetailsConfig",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "titleSelector": { "type": "string" },
+        "authorSelector": { "type": "string" },
+        "descriptionSelector": { "type": "string" },
+        "coverSelector": { "type": "string" },
+        "coverAttr": { "type": "string", "default": "src" },
+        "cover": { "$ref": "#/$defs/coverChain" },
+        "bannerSelector": {
+          "type": "string",
+          "description": "A wide hero image distinct from cover (a poster-shaped thumbnail) and background (a tiled backdrop meant to sit beneath it) — some sites render all three."
+        },
+        "bannerAttr": { "type": "string", "default": "src" },
+        "banner": { "$ref": "#/$defs/coverChain" },
+        "backgroundSelector": {
+          "type": "string",
+          "description": "A tiled backdrop distinct from banner — often a near-solid per-series mood color rather than character art, so typically a cleaner tint-color source than banner. A CSS background-image URL doesn't live in a plain src/href attribute: use attr:\"style\" plus a chain rewrite (pattern/replace with $1 group refs) to pull the URL out of the raw url('...') value."
+        },
+        "backgroundAttr": { "type": "string", "default": "src" },
+        "background": { "$ref": "#/$defs/coverChain" },
+        "genreSelector": {
+          "type": "string",
+          "description": "Every matching element contributes one genre (its text, or genreAttr when set) — no label required, unlike rows. Overridden by rows' own genres field when that's also configured and matches."
+        },
+        "genreAttr": { "type": "string" },
+        "unlistedChaptersSelector": {
+          "type": "string",
+          "description": "A count the site advertises but doesn't expose through chapters at all (e.g. \"Read 12 new episodes only on the app!\") — distinct from chapters.lockedSelector, which flags a chapter that IS listed. The matched text is parsed leniently: the first run of digits found. Absent/unmatched/unparseable all mean 0."
+        },
+        "unlistedChaptersAttr": { "type": "string" },
+        "rows": { "$ref": "#/$defs/rows" },
+        "statusMap": {
+          "$ref": "#/$defs/stringMap",
+          "description": "Maps the site's status text (case-insensitive) to ongoing/completed/hiatus/cancelled."
+        },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "chapters": {
+      "title": "ChaptersConfig",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/requestTransform",
+          "description": "Derives the chapter-list URL from the manga URL; absent fetches the manga URL itself."
+        },
+        "itemSelector": { "type": "string" },
+        "nameSelector": { "type": "string", "default": "a" },
+        "nameAttr": { "type": "string" },
+        "urlSelector": { "type": "string", "default": "a" },
+        "urlAttr": { "type": "string", "default": "href" },
+        "dateSelector": { "type": "string" },
+        "dateAttr": { "type": "string" },
+        "lockedSelector": {
+          "type": "string",
+          "description": "Checked for presence (not text/attribute) within the chapter item — a match flags the chapter as locked (paywalled)."
+        },
+        "officialSelector": {
+          "type": "string",
+          "description": "Locates an element (with officialAttr/officialValue) within the chapter item whose extracted value marks this chapter as an official (licensed) translation rather than a fan scanlation. Unlike lockedSelector this is a value check, not presence — needed when the same badge element renders for every chapter and only an attribute differs."
+        },
+        "officialAttr": {
+          "type": "string",
+          "description": "Attribute officialSelector's element is read from; empty reads its text."
+        },
+        "officialValue": {
+          "type": "string",
+          "description": "Substring officialSelector's extracted value must contain for the chapter to be flagged official. Empty means the source has no such concept."
+        },
+        "reversed": {
+          "type": "boolean",
+          "default": true,
+          "description": "True when the site lists newest chapters first (the common case); the engine then reverses into reading order."
+        },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "scriptPages": {
+      "description": "Extracts page image URLs from an inline <script> JSON blob (e.g. MangaThemesia's ts_reader.run({...})) instead of <img> tags.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pattern"],
+      "properties": {
+        "pattern": { "type": "string", "description": "First capture group must yield the JSON text." },
+        "itemsPath": { "type": "string", "description": "Empty = the captured JSON is itself the list." },
+        "template": { "type": "string", "default": "{value}" }
+      }
+    },
+
+    "pages": {
+      "title": "PagesConfig",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": {
+          "$ref": "#/$defs/requestTransform",
+          "description": "Derives the page-list URL from the chapter URL; absent fetches the chapter URL itself."
+        },
+        "imageSelector": { "type": "string" },
+        "imageAttr": { "type": "string", "default": "src" },
+        "script": { "$ref": "#/$defs/scriptPages" },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "jsonValueSpec": {
+      "description": "Extraction of one string value from a JSON node: the first non-empty paths hit, optionally rendered through template ({value} = the hit). A bare string is shorthand for a single path.",
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "path": { "type": "string" },
+            "paths": { "type": "array", "items": { "type": "string" } },
+            "template": { "type": "string" },
+            "default": { "type": "string" }
+          }
+        }
+      ]
+    },
+
+    "jsonListSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "items": { "type": "string" },
+        "value": { "$ref": "#/$defs/jsonValueSpec" }
+      }
+    },
+
+    "jsonNameSpec": {
+      "description": "A multi-part label (e.g. \"Vol. 1 Ch. 2 Title\"): each part is a jsonValueSpec, missing parts skipped, the rest joined.",
+      "oneOf": [
+        { "$ref": "#/$defs/jsonValueSpec" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["parts"],
+          "properties": {
+            "parts": { "type": "array", "items": { "$ref": "#/$defs/jsonValueSpec" } },
+            "join": { "type": "string", "default": " " },
+            "default": { "type": "string" }
+          }
+        }
+      ]
+    },
+
+    "apiMangaSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "$ref": "#/$defs/jsonValueSpec" },
+        "title": { "$ref": "#/$defs/jsonValueSpec" },
+        "description": { "$ref": "#/$defs/jsonValueSpec" },
+        "author": { "$ref": "#/$defs/jsonValueSpec" },
+        "cover": { "$ref": "#/$defs/jsonValueSpec" },
+        "genres": { "$ref": "#/$defs/jsonListSpec" }
+      }
+    },
+
+    "apiListing": {
+      "title": "ApiListingConfig (popular/search)",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Supports {page}, {offset}, {query}, {lang}." },
+        "pageSize": { "type": "integer" },
+        "items": { "type": "string", "default": "data", "description": "JSON path to the result array." },
+        "totalPath": {
+          "type": "string",
+          "description": "JSON path to a total count for has-next; falls back to \"page was full\" when absent."
+        },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "apiDetails": {
+      "title": "ApiDetailsConfig",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Supports {url} (the manga's source id) and {lang}." },
+        "item": { "type": "string", "default": "data", "description": "JSON path to the manga node in the response." },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "apiChapterSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "$ref": "#/$defs/jsonValueSpec" },
+        "name": { "$ref": "#/$defs/jsonNameSpec" },
+        "number": { "$ref": "#/$defs/jsonValueSpec" },
+        "date": { "$ref": "#/$defs/jsonValueSpec" },
+        "skipIf": {
+          "type": "string",
+          "description": "Items with a non-null value at this path are dropped (e.g. a chapter that's actually hosted externally, outside this source)."
+        },
+        "locked": {
+          "type": "string",
+          "description": "Path to a value indicating this chapter is paywalled, read \"truthy\" (non-null/zero/false/empty)."
+        },
+        "official": {
+          "type": "string",
+          "description": "Path to a value indicating this chapter is an official (licensed) translation rather than a fan scanlation, read \"truthy\" the same way locked is."
+        }
+      }
+    },
+
+    "apiChapters": {
+      "title": "ApiChaptersConfig",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Supports {url}, {offset}, {page}, {lang}." },
+        "pageSize": { "type": "integer", "default": 100 },
+        "maxItems": { "type": "integer", "default": 1000, "description": "Caps a runaway feed." },
+        "items": { "type": "string", "default": "data" },
+        "totalPath": { "type": "string" },
+        "chapter": { "$ref": "#/$defs/apiChapterSpec" },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "apiPages": {
+      "title": "ApiPagesConfig",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string", "description": "Supports {url} (the chapter's source id) and {lang}." },
+        "items": { "type": "string", "default": "data" },
+        "template": { "type": "string", "default": "{value}" },
+        "steps": { "$ref": "#/$defs/pipeline" }
+      }
+    },
+
+    "pipeline": {
+      "title": "Explicit step pipeline (steps:)",
+      "description": "Overrides an operation's sugar fields with an ordered list of steps threading captured variables forward. See docs/extensions.md § Explicit step pipelines and docs/source-pipeline-engine.md.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/step" }
+    },
+
+    "locator": {
+      "description": "Extraction of one value from a parsed response. Under parse:html, selector+attr (empty attr = element text, empty selector = the root); under parse:json/regexJson, path+template ({value} = the located node). regex (optionally against `from`, a threaded var, instead of the body) takes precedence over selector/path when set.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selector": { "type": "string" },
+        "attr": { "type": "string" },
+        "path": { "type": "string" },
+        "template": { "type": "string" },
+        "regex": { "type": "string", "description": "First capture group is the value." },
+        "from": { "type": "string", "description": "Match `regex` against this threaded var instead of the response body." },
+        "imageFallback": { "type": "boolean", "description": "Falls back to the data-src attribute (lazy-load images)." },
+        "exists": { "type": "boolean", "description": "Presence check: \"1\" when found, \"\" otherwise." },
+        "values": { "type": "boolean", "description": "On a list locator: iterate a JSON object's values (object-keyed collections)." },
+        "encode": { "type": "boolean", "description": "URL-encode the captured value before threading it into a later request." },
+        "rewrite": { "$ref": "#/$defs/valueRewrite" },
+        "fallbacks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/locator" },
+          "description": "Tried in order when this locator yields nothing; the first non-empty wins."
+        }
+      }
+    },
+
+    "pagination": {
+      "description": "For a record or flat-list output whose source paginates server-side: re-runs the step, incrementing pageVar, merging results, until currentPageMeta/lastPageMeta or hasNextMeta (read from `yield.meta`) agree there's nothing left or maxPages is hit.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pageVar": { "type": "string", "default": "page" },
+        "currentPageMeta": { "type": "string" },
+        "lastPageMeta": { "type": "string" },
+        "hasNextMeta": {
+          "type": "string",
+          "description": "Alternative to currentPageMeta/lastPageMeta for a paginator that only exposes a has-next-page presence signal (e.g. a `rel=next` link) rather than a reliable total page count. Takes priority over currentPageMeta/lastPageMeta when set."
+        },
+        "maxPages": { "type": "integer", "default": 50 }
+      }
+    },
+
+    "stepOutput": {
+      "description": "The terminal step's result producer: a record list (list+fields+meta) for listings/chapters, a flat list (list+value) for pages, or a generate shape (count+value.template+start) for readers with a page count and a {n}-templated URL.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "list": { "$ref": "#/$defs/locator" },
+        "value": { "$ref": "#/$defs/locator" },
+        "fields": { "type": "object", "additionalProperties": { "$ref": "#/$defs/locator" } },
+        "meta": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/locator" },
+          "description": "Document/root-level values read once from the terminal response (e.g. a has-next flag)."
+        },
+        "count": { "$ref": "#/$defs/locator" },
+        "start": { "type": "integer", "default": 1 },
+        "paginate": { "$ref": "#/$defs/pagination" }
+      }
+    },
+
+    "stepRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string", "description": "Templated over the threaded vars ({var}); relative resolves against baseUrl/apiUrl." },
+        "method": { "type": "string", "enum": ["GET", "POST"], "default": "GET" },
+        "body": { "type": "string" },
+        "headers": { "$ref": "#/$defs/stringMap" }
+      }
+    },
+
+    "jsStep": {
+      "description": "A compute step: run `code` in the sandboxed JS runtime instead of fetching. Requires the source's top-level `js: true`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code"],
+      "properties": {
+        "code": { "type": "string" },
+        "args": {
+          "$ref": "#/$defs/stringMap",
+          "description": "{var} templates resolved from threaded vars, JSON-injected as the global $."
+        },
+        "capture": { "type": "string", "description": "Var name to store the string result in." },
+        "captureJson": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "When the result is a JSON object: {var: path} pairs to capture by path."
+        }
+      }
+    },
+
+    "decryptStep": {
+      "description": "A compute step: decrypt an already-captured {ct,iv,s} ciphertext envelope (CryptoJS passphrase-mode AES-256-CBC, OpenSSL EVP_BytesToKey/MD5 key derivation, explicit IV — a shape a few sites' \"protect the page list\" schemes ship) instead of fetching. See lib/src/crypto_decrypt.dart and the jinmangas writeup in sources-catalog.md.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["data", "password"],
+      "properties": {
+        "data": { "type": "string", "description": "{var} template resolving to the {ct,iv,s} JSON envelope." },
+        "password": { "type": "string", "description": "{var} template resolving to the passphrase." },
+        "capture": { "type": "string", "description": "Var name for the plaintext, on an intermediate step." }
+      }
+    },
+
+    "step": {
+      "title": "Step",
+      "description": "One hop of a pipeline: fetch (request) or compute (js/decrypt), parse (parse/regex), then either capture scalars for later steps or yield the operation's result (terminal step only).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request": { "$ref": "#/$defs/stepRequest" },
+        "js": { "$ref": "#/$defs/jsStep" },
+        "decrypt": { "$ref": "#/$defs/decryptStep" },
+        "parse": {
+          "type": "string",
+          "enum": ["html", "json", "regexJson", "jsonHtml"],
+          "default": "html"
+        },
+        "regex": { "type": "string", "description": "For parse:regexJson: first capture group is the JSON text." },
+        "htmlFrom": { "type": "string", "description": "For parse:jsonHtml: JSON path to the HTML fragment string." },
+        "capture": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/locator" },
+          "description": "Scalars threaded into later steps as {name}."
+        },
+        "yield": {
+          "$ref": "#/$defs/stepOutput",
+          "description": "Present on the terminal step only — produces the operation's result."
+        }
+      }
+    }
+  }
+}

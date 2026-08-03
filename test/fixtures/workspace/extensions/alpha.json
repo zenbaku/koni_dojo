@@ -1,0 +1,18 @@
+{
+  "name": "Alpha",
+  "pkg": "app.koni.fixture.alpha",
+  "version": "1.0.0",
+  "lang": "en",
+  "nsfw": 0,
+  "sources": [
+    {
+      "id": "alpha",
+      "name": "Alpha",
+      "lang": "en",
+      "baseUrl": "https://alpha.example",
+      "popular": { "path": "/popular?page={page}", "itemSelector": "div.item", "titleSelector": "a.title", "urlSelector": "a.title", "urlAttr": "href" },
+      "chapters": { "itemSelector": "li.chapter", "nameSelector": "a", "urlSelector": "a", "urlAttr": "href" },
+      "pages": { "imageSelector": "div.reader img", "imageAttr": "src" }
+    }
+  ]
+}

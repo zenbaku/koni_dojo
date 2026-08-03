@@ -1,0 +1,93 @@
+---
+title: Dojo
+description: A pure-Dart declarative engine that turns JSON configs into live manga-source scraping pipelines, plus the pipeline that curates them.
+template: splash
+hero:
+  tagline: A pure-Dart engine that turns hand-authored JSON into live manga sources, plus the pipeline that curates them.
+  image:
+    file: ../../assets/koni_dojo_icon.png
+    alt: Dojo
+  actions:
+    - text: Quickstart
+      link: /koni_dojo/start/quickstart/
+      icon: right-arrow
+      variant: primary
+    - text: Core ideas
+      link: /koni_dojo/start/concepts/
+      icon: open-book
+      variant: minimal
+    - text: View on GitHub
+      link: https://github.com/zenbaku/koni_dojo
+      icon: github
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## What this is
+
+**Dojo** (the `koni_dojo` package) is a **declarative source engine**: a
+pure-Dart package that scrapes a site (HTML or JSON API) from a **JSON
+config**, with no per-site code. You describe *where the data is* with CSS
+selectors / JSON paths and templates; the engine does the fetching, parsing,
+and pagination.
+
+Around it sits the tooling to author a config against a live page, validate a
+collection of them, and build the result into an index a reader app can
+install: `build-repo`, `capture-icons`, `serve`, `publish`, and a desktop
+playground.
+
+The engine and that tooling live in one repo; the **source collections are
+data and live in their own repos** (workspaces), kept separate so the engine
+stays code-only — as does whatever process a given collection uses to grow
+itself. No Flutter dependency; everything runs with just the Dart SDK. Nothing
+is app-specific: any reader that can install a served or published index can
+use what it produces.
+
+:::note[Scope & legal]
+Dojo is a **content-neutral engine**, not a service. It doesn't fetch, host,
+cache, or distribute anyone's content. It's a library that turns a JSON config
+into an HTTP/HTML-parsing pipeline, run entirely on the end-user's own device.
+It ships **no bundled site list and no hosted index**: an app built on it
+reaches a site only when the person running it points a user-supplied config
+there. Whether using a given config against a given site complies with that
+site's own terms is between that user and that site. The engine has no say in
+and takes no part in that.
+:::
+
+## The whole idea, in one config
+
+A source is just data. This config *is* a working manga source:
+
+```json
+{
+  "id": "example",
+  "baseUrl": "https://example.com",
+  "popular": {
+    "path": "/manga/page/{page}/?m_orderby=views",
+    "itemSelector": "div.card",
+    "titleSelector": "h3 a",
+    "urlSelector": "h3 a", "urlAttr": "href"
+  },
+  "chapters": { "itemSelector": "li.chapter", "nameSelector": "a", "urlSelector": "a" },
+  "pages": { "imageSelector": "div.reader img", "imageAttr": "src" }
+}
+```
+
+The engine compiles every operation (popular, search, details, chapters, pages)
+down to one linear pipeline runner. When a site needs more (POST requests,
+two-phase lookups, script-blob readers, even running the site's own JavaScript),
+the config gains a `steps:` pipeline instead of a per-site Dart class.
+
+## Where to go next
+
+<CardGrid>
+  <LinkCard title="Quickstart" href="/koni_dojo/start/quickstart/"
+    description="Clone, build the repo index, and live-probe your first source in a few minutes." />
+  <LinkCard title="Core ideas" href="/koni_dojo/start/concepts/"
+    description="Configs, the engine, tiers, workspaces: the vocabulary in one page." />
+  <LinkCard title="The engine" href="/koni_dojo/architecture/engine/"
+    description="How a declarative config becomes a running Source, and the pipeline it compiles to." />
+  <LinkCard title="Config format" href="/koni_dojo/reference/config-format/"
+    description="Every field of the declarative config, for both the HTML and API dialects." />
+</CardGrid>

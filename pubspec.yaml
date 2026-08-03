@@ -1,0 +1,28 @@
+name: koni_dojo
+description: >-
+  A declarative manga/comic source engine: turn a JSON config into a scraping
+  source (HTML or JSON API), no per-site code. Pure Dart, pipeline-based,
+  Cloudflare-aware.
+version: 0.2.0
+repository: https://github.com/zenbaku/koni_dojo
+homepage: https://zenbaku.github.io/koni_dojo/
+issue_tracker: https://github.com/zenbaku/koni_dojo/issues
+topics:
+  - manga
+  - scraping
+  - html
+  - source
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  crypto: ^3.0.7
+  csslib: ^1.0.0
+  html: ^0.15.4
+  http: ^1.2.2
+  pointycastle: ^4.0.0
+
+dev_dependencies:
+  test: ^1.25.0
+  lints: ^5.0.0
