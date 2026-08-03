@@ -79,6 +79,8 @@ served, and published independently. The default `--workspace` is the sibling
 
 Full design docs: [`docs/`](docs/) (architecture, public API, config schema,
 the pipeline engine) and the [docs site](https://zenbaku.github.io/koni_dojo/).
+What's known-open and what's been deliberately deferred is in
+[`docs/roadmap.md`](docs/roadmap.md).
 
 ## The toolkit
 
