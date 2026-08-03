@@ -1,10 +1,19 @@
-// Publishes a workspace's built repo/ to its Cloudflare Pages project (the
+// Publishes a workspace's built index to its Cloudflare Pages project (the
 // public URL an app's "Add repository" points at). The target project comes
 // from the workspace manifest's `publish.cfProject`. Workspace-aware
 // (--workspace / WORKSPACE, default workspaces/default); see tool/workspace.dart.
 //
 //   dart run tool/publish_repo.dart                    # default workspace
 //   dart run tool/publish_repo.dart --workspace nsfw   # another workspace
+//
+// **Publishes `repo/index.min.json` only**, not the whole `repo/` directory.
+// That directory also holds `generated-index.min.json` — a workspace's
+// bulk-generated, live-unverified tier — which is working state, not a
+// deliverable: nothing fetches it over HTTP (tooling reads it from disk), and
+// it lists sources that deliberately haven't passed verification. Deploying
+// the directory wholesale would publish it as a side effect of publishing the
+// index, so the upload is staged from a temp directory containing just the
+// index instead.
 //
 // One-time setup: `npx wrangler login`, and create the project once with
 // `npx wrangler pages project create <cfProject>`.
@@ -23,17 +32,30 @@ Future<void> main(List<String> args) async {
     );
     exit(1);
   }
-  if (!Directory(ws.repoDir).existsSync()) {
-    stderr.writeln('No ${ws.repoDir}/ — run build-repo first.');
+  final index = File(ws.repoIndex);
+  if (!index.existsSync()) {
+    stderr.writeln('No ${ws.repoIndex} — run build-repo first.');
     exit(1);
   }
-  print('Publishing ${ws.repoDir} → Cloudflare Pages project "$project"');
-  final proc = await Process.start('npx', [
-    'wrangler',
-    'pages',
-    'deploy',
-    ws.repoDir,
-    '--project-name=$project',
-  ], mode: ProcessStartMode.inheritStdio);
-  exit(await proc.exitCode);
+
+  // Staged rather than uploading ws.repoDir directly; see the header note.
+  final staging = Directory.systemTemp.createTempSync('koni_dojo_publish_');
+  try {
+    index.copySync('${staging.path}/index.min.json');
+    final sizeKb = (index.lengthSync() / 1024).round();
+    print(
+      'Publishing ${ws.repoIndex} ($sizeKb KB) → '
+      'Cloudflare Pages project "$project"',
+    );
+    final proc = await Process.start('npx', [
+      'wrangler',
+      'pages',
+      'deploy',
+      staging.path,
+      '--project-name=$project',
+    ], mode: ProcessStartMode.inheritStdio);
+    exit(await proc.exitCode);
+  } finally {
+    staging.deleteSync(recursive: true);
+  }
 }

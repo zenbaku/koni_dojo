@@ -11,6 +11,10 @@ coverage/
 # OS
 .DS_Store
 
+# Wrangler's local cache, left behind by `task publish` (tool/publish_repo.dart
+# shells out to it). Regenerated on demand; never part of the package.
+.wrangler/
+
 # Docs site (Astro Starlight — isolated Node toolchain)
 docs-site/node_modules/
 docs-site/dist/
