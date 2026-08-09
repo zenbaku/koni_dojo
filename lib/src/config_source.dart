@@ -122,6 +122,21 @@ class _HtmlEngine {
 
   Future<void> throttle() => _limiter?.acquire() ?? Future.value();
 
+  /// Open share scopes. While any is open, identical GETs resolve to one
+  /// in-flight request instead of repeating the fetch — see
+  /// [Source.withSharedRequests] for why this is scoped rather than timed.
+  int _shareDepth = 0;
+  final Map<String, Future<String>> _shared = {};
+
+  void beginShare() => _shareDepth++;
+
+  void endShare() {
+    if (--_shareDepth <= 0) {
+      _shareDepth = 0;
+      _shared.clear();
+    }
+  }
+
   /// Fetches [url]'s raw HTML. Parsing is kept separate so the background
   /// methods ([fetchPages], [fetchChapters]) can hand the body to a background
   /// isolate, while interactive browsing parses inline through [_fetchDocument].
@@ -134,14 +149,47 @@ class _HtmlEngine {
     String body = '',
     Map<String, String> extraHeaders = const {},
   }) async {
+    // Inside a share scope, one GET serves every caller that asks for the same
+    // URL with the same headers. A screen that loads details and then chapters
+    // asks for the identical page twice; on a `webview: true` source that was
+    // two full browser navigations for one screen.
+    if (method == 'GET' && _shareDepth > 0) {
+      final key = '$url\n${_sortedHeaderKey(extraHeaders)}';
+      final shared = _shared[key];
+      if (shared != null) return shared;
+      final pending = _fetchBodyUncached(
+        url,
+        method: method,
+        body: body,
+        extraHeaders: extraHeaders,
+      );
+      _shared[key] = pending;
+      return pending;
+    }
+    return _fetchBodyUncached(
+      url,
+      method: method,
+      body: body,
+      extraHeaders: extraHeaders,
+    );
+  }
+
+  static String _sortedHeaderKey(Map<String, String> headers) {
+    final keys = headers.keys.toList()..sort();
+    return [for (final k in keys) '$k=${headers[k]}'].join('&');
+  }
+
+  Future<String> _fetchBodyUncached(
+    String url, {
+    String method = 'GET',
+    String body = '',
+    Map<String, String> extraHeaders = const {},
+  }) async {
     final uri = Uri.parse(url);
     final headers = {
       'User-Agent': 'Mozilla/5.0 (Konimanga)',
       ...config.headers,
       ...extraHeaders,
-      // Last so a stored clearance's cookie + matching UA win over the
-      // defaults, looked up by this request's own host, since a pipeline/
-      // steps request can target a host other than [baseUrl].
       ...?clearanceStore?.headersFor(url),
     };
     // CF-hard hosts: fetch GETs through the WebView (browser fingerprint +
@@ -700,6 +748,8 @@ Source htmlSource(
     // this just hands it the wire.
     client: engine.client,
     webViewFetcher: engine.webViewFetcher,
+    beginShare: engine.beginShare,
+    endShare: engine.endShare,
     imageHeaders: engine.imageHeadersFor,
     throttle: engine.throttle,
     clearanceSink: (store) => engine.clearanceStore = store,

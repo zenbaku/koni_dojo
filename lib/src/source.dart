@@ -436,6 +436,8 @@ class Source {
     void Function(LocalStoragePreferenceStore?)? localStoragePreferenceSink,
     http.Client? client,
     WebViewFetcher? webViewFetcher,
+    void Function()? beginShare,
+    void Function()? endShare,
     this.warmImageByUrl = false,
     this.warmImageViaImgTag = false,
     this.requiresWebView = false,
@@ -447,7 +449,9 @@ class Source {
        _clearanceSink = clearanceSink,
        _localStoragePreferenceSink = localStoragePreferenceSink,
        _client = client,
-       _webViewFetcher = webViewFetcher;
+       _webViewFetcher = webViewFetcher,
+       _beginShare = beginShare,
+       _endShare = endShare;
 
   final SourceInfo info;
   final SourceOps _ops;
@@ -463,6 +467,34 @@ class Source {
   final http.Client? _client;
   final WebViewFetcher? _webViewFetcher;
   http.Client? _lazyClient;
+  final void Function()? _beginShare;
+  final void Function()? _endShare;
+
+  /// Runs [body] with identical GETs to this source coalesced into one
+  /// request.
+  ///
+  /// For a caller that legitimately needs the same page twice: loading a
+  /// series screen asks for details and then chapters, and on most sites both
+  /// parse the same document. On a [requiresWebView] source that was two full
+  /// browser navigations to render one screen.
+  ///
+  /// **Scoped, deliberately, rather than a cache with a time-to-live.** A TTL
+  /// would silently answer a user-initiated refresh with a stale page, and the
+  /// bug it caused would appear seconds later somewhere else entirely. Here
+  /// the sharing lasts exactly as long as the caller says it does; the next
+  /// scope refetches. Nesting is refcounted, so an inner scope doesn't end an
+  /// outer one.
+  ///
+  /// GETs only: a POST is a request to change something, and two of them are
+  /// not one.
+  Future<T> withSharedRequests<T>(Future<T> Function() body) async {
+    _beginShare?.call();
+    try {
+      return await body();
+    } finally {
+      _endShare?.call();
+    }
+  }
 
   /// Whether this source's images need a transport that can adapt per
   /// request, which rules out handing them to an OS background downloader.
