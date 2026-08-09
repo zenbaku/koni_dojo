@@ -244,6 +244,64 @@ void main() {
     });
   });
 
+  group('caller headers layer over the source, never replace it', () {
+    Source sourceWith(Map<String, String> headers) => htmlSource(
+      SourceConfig.fromJson({
+        'id': 'f',
+        'name': 'F',
+        'baseUrl': 'https://site.test',
+        'headers': headers,
+        'popular': {'path': '/p', 'itemSelector': 'a'},
+        'chapters': {'itemSelector': 'a'},
+        'pages': {'imageSelector': 'img'},
+      }),
+      client: MockClient((request) async {
+        // Stands in for the real CDN, which answers 403 to anything without a
+        // Referer and 200 with it.
+        final referer = request.headers['Referer'] ?? request.headers['referer'];
+        return referer == null
+            ? http.Response('denied', 403)
+            : http.Response.bytes(_png, 200);
+      }),
+    );
+
+    // The regression: an ImageProvider's `headers = const {}` default is not
+    // null, so a `headers ?? source` fallback kept the empty map and threw the
+    // source's Referer away. Every page 403'd.
+    test('an empty map does not erase them', () async {
+      final bytes = await sourceWith(const {}).imageBytes(
+        url,
+        headers: const {},
+      );
+      expect(bytes, _png);
+    });
+
+    test('a per-page token arrives alongside them, not instead', () async {
+      var seen = <String, String>{};
+      final source = htmlSource(
+        SourceConfig.fromJson({
+          'id': 'f',
+          'name': 'F',
+          'baseUrl': 'https://site.test',
+          'popular': {'path': '/p', 'itemSelector': 'a'},
+          'chapters': {'itemSelector': 'a'},
+          'pages': {'imageSelector': 'img'},
+        }),
+        client: MockClient((request) async {
+          seen = request.headers;
+          return http.Response.bytes(_png, 200);
+        }),
+      );
+      await source.imageBytes(url, headers: const {'X-Token': 'abc'});
+      expect(seen['X-Token'], 'abc');
+      expect(
+        seen.keys.map((k) => k.toLowerCase()),
+        contains('referer'),
+        reason: 'the source Referer was dropped when a token was supplied',
+      );
+    });
+  });
+
   test('a browser fallback is announced, so it does not read as a hang',
       () async {
     final notices = <SourceImageNotice>[];

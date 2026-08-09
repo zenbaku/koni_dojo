@@ -551,7 +551,15 @@ class Source {
   }) => fetchSourceImage(
     url,
     client: _client ?? (_lazyClient ??= http.Client()),
-    headers: headers ?? imageRequest(url).headers,
+    // The source's own headers are the floor, the caller's layer over them.
+    //
+    // Never `headers ?? …`: a caller passing an empty map — which is what an
+    // ImageProvider's `headers = const {}` default is — is not null, so that
+    // form silently dropped the source's Referer and every page came back 403
+    // from a CDN that wanted nothing else. And a caller with a real per-page
+    // token still needs the site's Referer alongside it, so replacing is
+    // wrong even when the map is full.
+    headers: {...imageRequest(url).headers, ...?headers},
     webViewFetcher: _webViewFetcher,
     warmByUrl: warmImageByUrl,
     viaImgTag: warmImageViaImgTag,
