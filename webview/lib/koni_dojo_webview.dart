@@ -4414,8 +4414,11 @@ class _InAppWebViewFetcher implements WebViewFetcher {
   /// retries on the next fetch instead of silently never applying.
   final Map<String, String> _appliedLocalStorageSeeds = {};
 
-  /// Turns image loading on or off for the shared controller. Cheap and
-  /// idempotent; [_imagesBlocked] avoids a platform round-trip per call.
+  /// Whether [_blockImages] is currently applied, so a run of same-mode calls
+  /// skips a platform round-trip each. Null means unknown, which is also what
+  /// the teardown paths reset it to: a fresh WKWebView carries no content
+  /// blockers, so a stale `true` here would early-return and quietly render
+  /// every image again for the rest of the session.
   bool? _imagesBlocked;
 
   Future<void> _setImagesBlocked(
@@ -5133,6 +5136,7 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     _webview = null;
     _controller = null;
     _currentOrigin = null;
+    _imagesBlocked = null;
     try {
       await webview?.dispose();
     } catch (_) {
@@ -5148,6 +5152,7 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     await _webview?.dispose();
     _webview = null;
     _controller = null;
+    _imagesBlocked = null;
   }
 
   /// Broad on purpose: a missed challenge silently parses to zero results,
