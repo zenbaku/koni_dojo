@@ -20,6 +20,35 @@ import 'web_view_fetcher.dart';
 /// [fetchSourceImage] and takes responsibility for both.
 typedef SourceImageRequest = ({Uri url, Map<String, String> headers});
 
+/// An image fetch that failed on the response rather than the transport.
+///
+/// Implements [http.ClientException] so existing catches keep working, and
+/// adds [statusCode] so a caller can implement a retry policy — 5xx and 429
+/// are worth another attempt, a 404 is not — without parsing a message
+/// string. The download runner's retry loop is the reason this exists: it
+/// composes over [fetchSourceImage] and would otherwise be blind.
+class SourceImageException implements http.ClientException {
+  SourceImageException(this.statusCode, this.uri, [String? message])
+    : message = message ?? 'HTTP $statusCode';
+
+  /// The response status, or null when there wasn't a response at all.
+  final int? statusCode;
+
+  @override
+  final String message;
+
+  @override
+  final Uri? uri;
+
+  /// Whether another attempt could plausibly succeed: a server-side or
+  /// rate-limit failure, as opposed to a definitive answer.
+  bool get isTransient =>
+      statusCode != null && (statusCode! >= 500 || statusCode == 429);
+
+  @override
+  String toString() => 'SourceImageException: $message${uri == null ? '' : ', uri=$uri'}';
+}
+
 /// Why a fetch is taking much longer than a fetch should.
 enum SourceImageNotice {
   /// Fell back to driving a headless browser through a challenge, which can
@@ -111,7 +140,7 @@ Future<Uint8List> fetchSourceImage(
     // offer to solve a challenge that was never served. Callers retry on a
     // ClientException, which is the recovery this actually wants.
     if (response.bodyBytes.isEmpty) {
-      throw http.ClientException('Empty image body', url);
+      throw SourceImageException(200, url, 'Empty image body');
     }
     if (!_isWall(response.bodyBytes)) return response.bodyBytes;
   }
@@ -141,12 +170,12 @@ Future<Uint8List> fetchSourceImage(
     // offer an interactive solve, and a reader shown that instead of an
     // ordinary error keeps a broken page it would otherwise just retry.
     if (response == null) {
-      throw http.ClientException('Image request failed', url);
+      throw SourceImageException(null, url, 'Image request failed');
     }
     throw CloudflareChallengeException(url);
   }
 
-  throw http.ClientException('HTTP ${response.statusCode}', url);
+  throw SourceImageException(response.statusCode, url);
 }
 
 /// Asymmetric on purpose: only a body that positively looks like markup is
