@@ -4369,6 +4369,26 @@ const _pickerScript = r'''
 
 // ── WebViewFetcher ──────────────────────────────────────────────────────────
 
+/// Blocks image loading in the scraping WebView.
+///
+/// Reading a page list only needs the HTML, but a WebView renders the whole
+/// document — so scraping one chapter downloads and decodes every page image
+/// in WebKit, alongside the reader decoding the same images itself. On a real
+/// device that showed up as hundreds of failed WEBP decodes per chapter and a
+/// phone warm enough to notice.
+///
+/// `contentBlockers` rather than `blockNetworkImage`: the latter is Android
+/// only, and this matters most on iOS.
+final _blockImages = [
+  ContentBlocker(
+    trigger: ContentBlockerTrigger(
+      urlFilter: '.*',
+      resourceType: [ContentBlockerTriggerResourceType.IMAGE],
+    ),
+    action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
+  ),
+];
+
 /// Fetches CF-hard pages by navigating a persistent **headless** WebView and
 /// reading the rendered DOM, for `webview: true` sources whose Cloudflare
 /// mode re-challenges cookie-replay from a non-browser client. Shares the
@@ -4393,6 +4413,29 @@ class _InAppWebViewFetcher implements WebViewFetcher {
   /// (a wedged channel, a challenge on the seeding navigation itself)
   /// retries on the next fetch instead of silently never applying.
   final Map<String, String> _appliedLocalStorageSeeds = {};
+
+  /// Turns image loading on or off for the shared controller. Cheap and
+  /// idempotent; [_imagesBlocked] avoids a platform round-trip per call.
+  bool? _imagesBlocked;
+
+  Future<void> _setImagesBlocked(
+    InAppWebViewController controller,
+    bool blocked,
+  ) async {
+    if (_imagesBlocked == blocked) return;
+    try {
+      await controller.setSettings(
+        settings: InAppWebViewSettings(
+          contentBlockers: blocked ? _blockImages : [],
+        ),
+      );
+      _imagesBlocked = blocked;
+    } catch (e) {
+      // Never fail a fetch over an optimisation. Leaving the flag unset means
+      // the next call retries rather than assuming it took.
+      cfLog('WebViewFetcher: setSettings(contentBlockers) failed: $e');
+    }
+  }
 
   Future<InAppWebViewController> _ensure() async {
     final existing = _controller;
@@ -4481,6 +4524,12 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     required bool viaImgTag,
     String? baseUrl,
   }) async {
+    // ...and back on here: both byte paths depend on the image actually
+    // loading — `viaImgTag` reads it off a canvas, `warmByUrl` navigates the
+    // page so it lands in cache. Blocking images here would break downloading
+    // for exactly the sources that need this WebView. Safe to flip per call
+    // because every entry point is serialized on [_chain].
+    await _setImagesBlocked(await _ensure(), false);
     if (viaImgTag) {
       try {
         return await _navigateAndExtractViaImgTag(
@@ -4823,6 +4872,9 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     // stability check couldn't distinguish from "genuinely done loading".
     final startUrl = await _currentLocation(controller);
     final targetIsReload = startUrl == url;
+    // Images off for a scrape: this navigation exists to read the DOM, and
+    // rendering the chapter's artwork is pure waste (see [_blockImages]).
+    await _setImagesBlocked(controller, true);
     cfLog('WebViewFetcher: navigating to $url');
     try {
       await controller
