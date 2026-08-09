@@ -48,7 +48,8 @@ export 'src/source_probe.dart';
 // Injected capability seams: supply these from the host app; null-safe absent.
 export 'src/js_runner.dart'; // run site JS for `js`-step configs
 export 'src/web_view_fetcher.dart'; // WebView transport for CF-hard sources
-export 'src/cloudflare_challenge.dart'; // the challenge exception + guard
+export 'src/cloudflare_challenge.dart';
+export 'src/page_body.dart'; // is this response an image, or a wall wearing 200? // the challenge exception + guard
 
 // HTTP utilities a host commonly composes around the engine.
 export 'src/http_retry.dart';

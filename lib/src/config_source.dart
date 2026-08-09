@@ -698,6 +698,21 @@ Source htmlSource(
     ),
     imageHeaders: engine.imageHeadersFor,
     throttle: engine.throttle,
+    // The one place a caller gets image bytes for this source. Everything it
+    // needs to decide *how* — the header set, the rate limit, whether a
+    // browser is available, which warm strategy this site needs — is closed
+    // over here rather than published for each caller to reassemble.
+    imageBytes: (url, {headers, onNotice}) => fetchSourceImage(
+      url,
+      client: engine.client,
+      headers: headers ?? engine.imageHeadersFor(url.toString()),
+      webViewFetcher: engine.webViewFetcher,
+      warmByUrl: config.warmImageByUrl,
+      viaImgTag: config.warmImageViaImgTag,
+      baseUrl: config.baseUrl,
+      throttle: engine.throttle,
+      onNotice: onNotice,
+    ),
     clearanceSink: (store) => engine.clearanceStore = store,
     localStoragePreferenceSink: (store) =>
         engine.localStoragePreferenceStore = store,

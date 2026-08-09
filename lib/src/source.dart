@@ -1,10 +1,16 @@
+import 'dart:typed_data';
+
 import 'publication_status.dart';
+import 'source_image.dart';
 
 // [PublicationStatus] lives in its own file so consumers (the app's model layer
 // branches on it to tell a *completed* series from a merely *up to date* one)
 // can import it without pulling the rest of the engine. Re-exported here so the
 // many `import '…/source.dart'` users keep resolving it unchanged.
 export 'publication_status.dart';
+// The image-fetch policy + its request/notice types travel with Source: every
+// caller of imageBytes/imageRequest needs them.
+export 'source_image.dart';
 
 /// Replays a host's previously-captured Cloudflare clearance (the cookie a
 /// browser earned passing a challenge, plus the matching User-Agent) onto
@@ -411,12 +417,21 @@ class SourceInfo {
   final String icon;
 }
 
+/// The op behind [Source.imageBytes]. Builders close over their transport
+/// (an `http.Client`, optionally a `WebViewFetcher`) and supply one.
+typedef ImageBytesOp =
+    Future<Uint8List> Function(
+      Uri url, {
+      Map<String, String>? headers,
+      void Function(SourceImageNotice notice)? onNotice,
+    });
+
 /// The one concrete source type: data + composed ops, with an ergonomic facade
 /// so callers write `source.popular(1)`. Built by `htmlSource`/`apiSource` (the
 /// declarative engines) or hand-written for imperative sources, never
 /// subclassed. [imageHeaders]/[throttle]/[clearanceStore] are cross-cutting
-/// concerns the builder wires to its transport (covers are fetched directly via
-/// `Image.network`, and the downloader rate-limits its own image requests).
+/// concerns the builder wires to its transport, and [imageBytes] is the one
+/// place the resulting fetch policy lives — see `fetchSourceImage`.
 class Source {
   Source({
     required this.info,
@@ -425,6 +440,7 @@ class Source {
     Future<void> Function()? throttle,
     void Function(ClearanceStore?)? clearanceSink,
     void Function(LocalStoragePreferenceStore?)? localStoragePreferenceSink,
+    ImageBytesOp? imageBytes,
     this.warmImageByUrl = false,
     this.warmImageViaImgTag = false,
     this.requiresWebView = false,
@@ -434,7 +450,8 @@ class Source {
        _imageHeaders = imageHeaders,
        _throttle = throttle,
        _clearanceSink = clearanceSink,
-       _localStoragePreferenceSink = localStoragePreferenceSink;
+       _localStoragePreferenceSink = localStoragePreferenceSink,
+       _imageBytes = imageBytes;
 
   final SourceInfo info;
   final SourceOps _ops;
@@ -443,6 +460,49 @@ class Source {
   final void Function(ClearanceStore?)? _clearanceSink;
   final void Function(LocalStoragePreferenceStore?)?
   _localStoragePreferenceSink;
+  final ImageBytesOp? _imageBytes;
+
+  /// URL and headers for one of this source's images, for a host that has to
+  /// perform the fetch itself.
+  ///
+  /// Exists for exactly one caller shape: a transport that isn't Dart. The
+  /// app's native download runner hands the request to a platform downloader
+  /// that keeps working while the process is suspended, so it can't call
+  /// [imageBytes]. Everything else should — this gives up wall detection and
+  /// WebView recovery, and the caller takes on both.
+  ///
+  /// See [requiresWebView]: a source that needs a browser can't be served by
+  /// this at all.
+  SourceImageRequest imageRequest(Uri url) => (
+    url: url,
+    headers: _imageHeaders?.call(url.toString()) ?? const <String, String>{},
+  );
+
+  /// The bytes of one of this source's images — a page or a cover.
+  ///
+  /// Handles the source's own header set, rate limit, wall detection and
+  /// (where the host supplied a browser) challenge recovery. Prefer this over
+  /// fetching a page URL directly: the flags that decide *how* to recover
+  /// belong to the source, and a caller that reaches for them itself is a
+  /// caller that will eventually get them wrong.
+  ///
+  /// Throws `CloudflareChallengeException` when the source is walled and no
+  /// browser recovered it; `http.ClientException` for ordinary failures.
+  Future<Uint8List> imageBytes(
+    Uri url, {
+    Map<String, String>? headers,
+    void Function(SourceImageNotice notice)? onNotice,
+  }) {
+    final op = _imageBytes;
+    if (op == null) {
+      throw StateError(
+        'Source "${info.id}" was built without an image fetcher. Builders '
+        '(htmlSource/apiSource) wire one; a hand-composed Source must pass '
+        'imageBytes: to use this.',
+      );
+    }
+    return op(url, headers: headers, onNotice: onNotice);
+  }
 
   /// Mirrors `SourceConfig.warmImageByUrl`. See
   /// `WebViewFetcher.fetchBytes`'s `warmByUrl` param. False (the default)

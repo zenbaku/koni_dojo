@@ -591,6 +591,18 @@ Source apiSource(ApiSourceConfig config, {http.Client? client}) {
     ),
     imageHeaders: engine.imageHeadersFor,
     throttle: engine.throttle,
+    // No WebView leg: an API source doesn't use that transport. The wall
+    // detection still earns its place — a signed-URL API's failure mode is a
+    // JSON error body served with HTTP 200, which is precisely what a caller
+    // fetching the URL itself would store as a "page".
+    imageBytes: (url, {headers, onNotice}) => fetchSourceImage(
+      url,
+      client: engine.client,
+      headers: headers ?? engine.imageHeadersFor(url.toString()),
+      baseUrl: config.baseUrl,
+      throttle: engine.throttle,
+      onNotice: onNotice,
+    ),
     clearanceSink: (store) => engine.clearanceStore = store,
     ops: SourceOps(
       popular: (q) => engine.fetchPopular(q.page),
