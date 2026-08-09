@@ -1,0 +1,13 @@
+# `live` tests reach the real network through a real browser, so the default
+# run excludes them and stays hermetic and offline.
+#
+#   dart test              # everything except live
+#   dart test -P live      # only the live ones
+exclude_tags: live
+
+presets:
+  live:
+    # A tag nothing carries: the only way to lift the exclusion above, since
+    # an empty exclude_tags is not a valid expression.
+    exclude_tags: never
+    include_tags: live
