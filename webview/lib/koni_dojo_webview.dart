@@ -4471,6 +4471,9 @@ class _InAppWebViewFetcher implements WebViewFetcher {
             url,
             headers: headers,
             localStorageSeed: localStorageSeed,
+            // The only caller that wants images off: this reads the DOM and
+            // nothing else, so rendering the page's artwork is pure waste.
+            blockImages: true,
           ),
         );
       } catch (e, st) {
@@ -4527,11 +4530,16 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     required bool viaImgTag,
     String? baseUrl,
   }) async {
-    // ...and back on here: both byte paths depend on the image actually
-    // loading — `viaImgTag` reads it off a canvas, `warmByUrl` navigates the
-    // page so it lands in cache. Blocking images here would break downloading
-    // for exactly the sources that need this WebView. Safe to flip per call
-    // because every entry point is serialized on [_chain].
+    // Images on: both byte paths depend on the image actually loading —
+    // `viaImgTag` reads it off a canvas, `warmByUrl` navigates to the image
+    // itself. Blocking here breaks downloading for exactly the sources that
+    // need this WebView.
+    //
+    // Needed *in addition* to the per-navigation default because
+    // [_navigateAndFetchBytes] skips navigating when already parked on the
+    // origin — which is the common case right after a scrape of the same
+    // site left images blocked. Without this the first page of every chapter
+    // would fail. Safe to flip per call: every entry point runs on [_chain].
     await _setImagesBlocked(await _ensure(), false);
     if (viaImgTag) {
       try {
@@ -4837,13 +4845,18 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     String url, {
     Map<String, String>? headers,
     Map<String, dynamic>? localStorageSeed,
+    bool blockImages = false,
   }) async {
     final origin = Uri.parse(url).origin;
     if (localStorageSeed != null && localStorageSeed.isNotEmpty) {
       final encoded = jsonEncode(localStorageSeed);
       if (_appliedLocalStorageSeeds[origin] != encoded) {
         cfLog('WebViewFetcher: seeding localStorage for $origin before $url');
-        await _navigateAndReadOnce(url, headers: headers);
+        await _navigateAndReadOnce(
+          url,
+          headers: headers,
+          blockImages: blockImages,
+        );
         final controller = await _ensure();
         for (final entry in localStorageSeed.entries) {
           final jsValue = jsonEncode(entry.value);
@@ -4858,12 +4871,17 @@ class _InAppWebViewFetcher implements WebViewFetcher {
         _appliedLocalStorageSeeds[origin] = encoded;
       }
     }
-    return _navigateAndReadOnce(url, headers: headers);
+    return _navigateAndReadOnce(
+      url,
+      headers: headers,
+      blockImages: blockImages,
+    );
   }
 
   Future<String> _navigateAndReadOnce(
     String url, {
     Map<String, String>? headers,
+    bool blockImages = false,
   }) async {
     final controller = await _ensure();
     _currentOrigin = Uri.parse(url).origin;
@@ -4875,9 +4893,9 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     // stability check couldn't distinguish from "genuinely done loading".
     final startUrl = await _currentLocation(controller);
     final targetIsReload = startUrl == url;
-    // Images off for a scrape: this navigation exists to read the DOM, and
-    // rendering the chapter's artwork is pure waste (see [_blockImages]).
-    await _setImagesBlocked(controller, true);
+    // Per navigation, never globally: a byte fetch can reuse a page a scrape
+    // just left behind, so whichever ran last must not decide for the next.
+    await _setImagesBlocked(controller, blockImages);
     cfLog('WebViewFetcher: navigating to $url');
     try {
       await controller
