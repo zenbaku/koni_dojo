@@ -212,6 +212,38 @@ void main() {
     expect(fetcher.lastHeaders, {'referer': 'https://example.test/'});
   });
 
+  group('requiresLiveTransport', () {
+    Source sourceFrom(Map<String, dynamic> extra) => htmlSource(
+      SourceConfig.fromJson({
+        'id': 'f',
+        'name': 'F',
+        'baseUrl': 'https://example.test',
+        ...extra,
+        'popular': {'path': '/p', 'itemSelector': 'a'},
+        'chapters': {'itemSelector': 'a'},
+        'pages': {'imageSelector': 'img'},
+      }),
+    );
+
+    test('a plain source can be served by a deferred transport', () {
+      expect(sourceFrom({}).requiresLiveTransport, isFalse);
+    });
+
+    test('a webview source cannot', () {
+      expect(sourceFrom({'webview': true}).requiresLiveTransport, isTrue);
+    });
+
+    // The widening: these say "my images need a browser" even where the
+    // webview marker is absent, which an imperative source has no way to set.
+    test('a warm-strategy flag alone is enough', () {
+      expect(sourceFrom({'warmImageByUrl': true}).requiresLiveTransport, isTrue);
+      expect(
+        sourceFrom({'warmImageViaImgTag': true}).requiresLiveTransport,
+        isTrue,
+      );
+    });
+  });
+
   test('a browser fallback is announced, so it does not read as a hang',
       () async {
     final notices = <SourceImageNotice>[];

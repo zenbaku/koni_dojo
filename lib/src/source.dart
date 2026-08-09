@@ -464,6 +464,27 @@ class Source {
   final WebViewFetcher? _webViewFetcher;
   http.Client? _lazyClient;
 
+  /// Whether this source's images need a transport that can adapt per
+  /// request, which rules out handing them to an OS background downloader.
+  ///
+  /// [requiresWebView] is the real marker: these requests only work from a
+  /// browser, so a request built now and performed hours later by something
+  /// else can neither refresh what expired nor escalate when the wall comes
+  /// back. [warmImageByUrl]/[warmImageViaImgTag] widen it — both exist only
+  /// to tell a browser *how* to fetch an image, so a source setting either is
+  /// saying its images need one even where the marker is absent (an
+  /// imperative source, say, with no config to mirror).
+  ///
+  /// A host is expected to route these away from a deferred transport and
+  /// **say so**: on mobile, "downloading" normally means it continues with
+  /// the app closed, and for these sources it won't.
+  ///
+  /// Not yet the whole question — a source that signs each request needs the
+  /// same routing and sets none of these. When request signing lands, this is
+  /// the one place that has to learn about it.
+  bool get requiresLiveTransport =>
+      requiresWebView || warmImageByUrl || warmImageViaImgTag;
+
   /// URL and headers for one of this source's images, for a host that has to
   /// perform the fetch itself.
   ///
