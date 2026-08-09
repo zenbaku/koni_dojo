@@ -8,35 +8,41 @@
 /// import 'package:koni_dojo/chrome_cdp.dart';
 /// ```
 ///
-/// ## Why this exists
+/// ## What it is for
 ///
-/// The shipped app scrapes through the platform WebView, and has to: iOS and
-/// Android offer no way to drive Chrome. But that transport starts every run
-/// from a cold cookie jar, so a Cloudflare-walled source serves an
-/// *interactive* challenge — which a headless browser cannot clear, because
-/// telling a person from a script is the whole point of one. That made live
-/// verification of the scraping path impossible to automate.
+/// Live verification of the scraping path without Flutter or a device: the
+/// same configs and the same engine ops the app runs, driven by a real
+/// browser, under plain `dart test`. For the great majority of sources —
+/// anything not behind an interactive bot wall — that is the whole story.
 ///
-/// A real Chrome with a **persistent profile** solves it: the profile keeps
-/// its clearance between runs, and Chrome presents the mainstream fingerprint
-/// Cloudflare is tuned for. Measured against natomanga, a profile that had
-/// simply been used for ordinary browsing loaded a search page with no
-/// challenge at all, while the headless WebView was still being asked to
-/// prove itself.
+/// ## What it does NOT do: defeat Cloudflare
 ///
-/// This changes nothing about the app. [WebViewFetcher] is an injected seam,
-/// so this is a second implementation of an interface that already existed —
-/// the same configs, engine and tests, pointed at a different browser.
+/// It was built hoping it would, and it does not. Measured against natomanga,
+/// one variable at a time, same machine and IP:
 ///
-/// It also drops the Flutter requirement: this is pure Dart, so a live source
-/// test runs under `dart test` with no device.
+/// | setup                                            | challenge clears? |
+/// |--------------------------------------------------|-------------------|
+/// | plain Chrome, fresh profile, no CDP              | yes, under 75s, unattended |
+/// | CDP attached, fresh profile                      | no, 3 minutes     |
+/// | CDP attached, profile already holding clearance  | no, 3 minutes     |
 ///
-/// ## What it can't do
+/// Cloudflare refuses the **DevTools connection**, not the browser, the
+/// profile, or the fingerprint. Dropping `Runtime.enable` (a documented
+/// detection vector) and `--disable-blink-features=AutomationControlled` both
+/// failed to change it, and so did handing the session a clearance earned
+/// beforehand: it is re-challenged anyway.
 ///
-/// Make a *first* challenge disappear. If the profile has no clearance, run
-/// with `headless: false` and solve it once by hand; the profile keeps it and
-/// every later run is unattended. On a user's phone that remains the app's
-/// visible solver, and always will.
+/// Getting past that means stealth-patching CDP's observable artifacts, which
+/// is an arms race with recurring breakage and ongoing maintenance. That is a
+/// deliberate non-goal here. An extension running inside an ordinary Chrome is
+/// the approach that does work, because it is not an automation connection at
+/// all — see `docs/web-extension-transport.md` in the app for the companion
+/// extension this project already designed for web.
+///
+/// So: use this for sources without a bot wall, where it removes the device
+/// requirement entirely. For Cloudflare-hard sources the app's visible solver
+/// remains the answer, and a live check of those stays manual.
+///
 library;
 
 import 'dart:async';
@@ -108,6 +114,72 @@ class ChromeCdpFetcher implements WebViewFetcher {
     solveTimeout: solveTimeout,
   );
 
+  /// Browses [url] in a plain Chrome — **no debugging port** — until the
+  /// profile holds a Cloudflare clearance, then quits it.
+  ///
+  /// This exists because of a controlled result: same machine, same IP, same
+  /// fresh profile, same flags, one variable changed. Plain Chrome earned
+  /// `cf_clearance` in under 75 seconds with nobody touching it; the moment a
+  /// DevTools client was attached, the identical page sat on a
+  /// non-interactive challenge for three minutes and never cleared. Cloudflare
+  /// refuses the debugging connection, not the browser.
+  ///
+  /// So the sequence matters: earn the clearance without CDP, then attach.
+  /// The cookie lives in the profile, and the profile is what [launch] reuses.
+  /// Returns immediately when the profile already has one.
+  ///
+  /// Detection reads the cookie store as bytes rather than as SQLite, so this
+  /// needs no database dependency: the cookie's *name* is stored as plain
+  /// text, which is all this has to find.
+  static Future<bool> warmProfile({
+    required String userDataDir,
+    required String url,
+    String? executable,
+    Duration timeout = const Duration(minutes: 2),
+  }) async {
+    if (_hasClearance(userDataDir)) return true;
+    final exe = executable ?? _findChrome();
+    Directory(userDataDir).createSync(recursive: true);
+    final process = await Process.start(exe, [
+      '--user-data-dir=$userDataDir',
+      '--no-first-run',
+      '--no-default-browser-check',
+      url,
+    ]);
+    try {
+      final deadline = DateTime.now().add(timeout);
+      while (DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (_hasClearance(userDataDir)) return true;
+      }
+      return false;
+    } finally {
+      process.kill();
+      // Chrome flushes its cookie store on exit; give it that moment before
+      // the caller relaunches against the same directory.
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+  }
+
+  static bool _hasClearance(String userDataDir) {
+    for (final name in ['Cookies', 'Cookies-wal', 'Cookies-journal']) {
+      final file = File('$userDataDir/Default/$name');
+      if (!file.existsSync()) continue;
+      try {
+        if (file.readAsBytesSync().let(_containsClearance)) return true;
+      } on Object {
+        // Locked mid-write by a live Chrome; the next poll sees it.
+      }
+    }
+    return false;
+  }
+
+  static String _findChrome() => _chromeCandidates.firstWhere(
+    (p) => File(p).existsSync(),
+    orElse: () =>
+        throw StateError('No Chrome found. Pass `executable:` explicitly.'),
+  );
+
   /// Starts Chrome against a **persistent** [userDataDir] and attaches.
   ///
   /// The persistence is the point: the clearance earned once — by this run
@@ -121,24 +193,29 @@ class ChromeCdpFetcher implements WebViewFetcher {
     String? executable,
     int port = 9222,
     bool headless = false,
+    String? warmUpUrl,
     Duration timeout = const Duration(seconds: 30),
     Duration solveTimeout = const Duration(minutes: 3),
   }) async {
-    final exe =
-        executable ??
-        _chromeCandidates.firstWhere(
-          (p) => File(p).existsSync(),
-          orElse: () => throw StateError(
-            'No Chrome found. Pass `executable:` explicitly.',
-          ),
-        );
+    final exe = executable ?? _findChrome();
     Directory(userDataDir).createSync(recursive: true);
+    if (warmUpUrl != null) {
+      await warmProfile(
+        userDataDir: userDataDir,
+        url: warmUpUrl,
+        executable: exe,
+      );
+    }
     final process = await Process.start(exe, [
       '--remote-debugging-port=$port',
       '--user-data-dir=$userDataDir',
       if (headless) '--headless=new',
       '--no-first-run',
       '--no-default-browser-check',
+      // Keeps navigator.webdriver false. Automation is not the thing being
+      // hidden — the point is that a real person is driving this window, and
+      // the flag is what stops Chrome from claiming otherwise.
+      '--disable-blink-features=AutomationControlled',
       // Keeps the run deterministic without touching the fingerprint
       // Cloudflare inspects.
       '--disable-background-timer-throttling',
@@ -204,9 +281,13 @@ class ChromeCdpFetcher implements WebViewFetcher {
       'flatten': true,
     });
     fetcher._sessionId = attached['sessionId'] as String;
-
-    await fetcher._send('Page.enable', const {});
-    await fetcher._send('Runtime.enable', const {});
+    // Deliberately no Page.enable / Runtime.enable. Enabling the Runtime
+    // domain is a documented bot-detection signal — Cloudflare probes for its
+    // side effects — and with it on, natomanga's *non-interactive* managed
+    // challenge never cleared: a verification page with nothing to click,
+    // spinning until the deadline. Neither domain is needed here, because
+    // this polls with Runtime.evaluate and Page.navigate rather than
+    // subscribing to events, and both work without their domain enabled.
     return fetcher;
   }
 
@@ -397,4 +478,23 @@ class ChromeCdpFetcher implements WebViewFetcher {
     await _socket.close();
     _process?.kill();
   }
+}
+
+extension _Let<T> on T {
+  R let<R>(R Function(T) f) => f(this);
+}
+
+bool _containsClearance(List<int> bytes) {
+  const needle = [
+    0x63, 0x66, 0x5F, 0x63, 0x6C, 0x65, 0x61, 0x72, //
+    0x61, 0x6E, 0x63, 0x65, // "cf_clearance"
+  ];
+  outer:
+  for (var i = 0; i + needle.length <= bytes.length; i++) {
+    for (var j = 0; j < needle.length; j++) {
+      if (bytes[i + j] != needle[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
 }

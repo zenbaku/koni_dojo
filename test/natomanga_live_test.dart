@@ -9,10 +9,17 @@
 // Opt-in: it needs the network and a Chrome. Tagged `live` so the ordinary
 // suite skips it.
 //
-// **First run may need you.** If the profile has never been to the site,
-// Cloudflare serves an interactive challenge; a window opens, you solve it
-// once, and the profile keeps the clearance for every later run. Point
-// CHROME_PROFILE at a directory you keep.
+// **This currently fails, and the reason is documented rather than hidden.**
+// natomanga is behind Cloudflare, and Cloudflare rejects a CDP-attached
+// Chrome outright — measured one variable at a time: plain Chrome clears in
+// under 75 seconds unattended, the same profile with a DevTools client
+// attached never clears, and neither does one already holding a clearance.
+// See `lib/chrome_cdp.dart` for the table and what would actually be needed.
+//
+// It is kept because it is the check we want, it will pass the moment a
+// transport that Cloudflare accepts exists, and every stage below the wall is
+// already proven correct against the live site. Deleting it would only make
+// the gap invisible.
 //
 // The config is the shipped one, read from the extension repo rather than
 // copied here, so this tests what actually ships.
@@ -38,7 +45,14 @@ void main() {
   late ChromeCdpFetcher chrome;
 
   setUpAll(() async {
-    chrome = await ChromeCdpFetcher.launch(userDataDir: _profile);
+    // Warm the profile without CDP first: Cloudflare refuses a DevTools
+    // connection outright, but a plain Chrome earns the clearance on its own,
+    // and the cookie is what the CDP session then rides. Skipped instantly
+    // once the profile has one.
+    chrome = await ChromeCdpFetcher.launch(
+      userDataDir: _profile,
+      warmUpUrl: 'https://www.natomanga.com/',
+    );
   });
 
   tearDownAll(() async => chrome.close());
