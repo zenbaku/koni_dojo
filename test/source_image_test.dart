@@ -148,6 +148,23 @@ void main() {
     });
   });
 
+  test('an empty 200 is a broken response, not a challenge', () async {
+    // classifyPageBody calls empty a wall — right for "never store this",
+    // wrong for "is this worth driving a browser through". Routing it to the
+    // WebView costs tens of seconds and reaches the user as an offer to solve
+    // a challenge that was never served.
+    final fetcher = _RecordingFetcher(() => _png);
+    await expectLater(
+      fetchSourceImage(
+        url,
+        client: clientReturning(200, Uint8List(0)),
+        webViewFetcher: fetcher,
+      ),
+      throwsA(isA<http.ClientException>()),
+    );
+    expect(fetcher.calls, 0);
+  });
+
   group('the browser is not trusted', () {
     test('bytes that are themselves a wall are rejected', () async {
       final fetcher = _RecordingFetcher(() => _wall);

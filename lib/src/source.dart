@@ -1,7 +1,10 @@
 import 'dart:typed_data';
 
+import 'package:http/http.dart' as http;
+
 import 'publication_status.dart';
 import 'source_image.dart';
+import 'web_view_fetcher.dart';
 
 // [PublicationStatus] lives in its own file so consumers (the app's model layer
 // branches on it to tell a *completed* series from a merely *up to date* one)
@@ -417,15 +420,6 @@ class SourceInfo {
   final String icon;
 }
 
-/// The op behind [Source.imageBytes]. Builders close over their transport
-/// (an `http.Client`, optionally a `WebViewFetcher`) and supply one.
-typedef ImageBytesOp =
-    Future<Uint8List> Function(
-      Uri url, {
-      Map<String, String>? headers,
-      void Function(SourceImageNotice notice)? onNotice,
-    });
-
 /// The one concrete source type: data + composed ops, with an ergonomic facade
 /// so callers write `source.popular(1)`. Built by `htmlSource`/`apiSource` (the
 /// declarative engines) or hand-written for imperative sources, never
@@ -440,7 +434,8 @@ class Source {
     Future<void> Function()? throttle,
     void Function(ClearanceStore?)? clearanceSink,
     void Function(LocalStoragePreferenceStore?)? localStoragePreferenceSink,
-    ImageBytesOp? imageBytes,
+    http.Client? client,
+    WebViewFetcher? webViewFetcher,
     this.warmImageByUrl = false,
     this.warmImageViaImgTag = false,
     this.requiresWebView = false,
@@ -451,7 +446,8 @@ class Source {
        _throttle = throttle,
        _clearanceSink = clearanceSink,
        _localStoragePreferenceSink = localStoragePreferenceSink,
-       _imageBytes = imageBytes;
+       _client = client,
+       _webViewFetcher = webViewFetcher;
 
   final SourceInfo info;
   final SourceOps _ops;
@@ -460,7 +456,13 @@ class Source {
   final void Function(ClearanceStore?)? _clearanceSink;
   final void Function(LocalStoragePreferenceStore?)?
   _localStoragePreferenceSink;
-  final ImageBytesOp? _imageBytes;
+  /// Transport for [imageBytes]. Optional so a hand-composed Source stays
+  /// cheap to build; one is created on first use when absent, because a
+  /// Source that can't fetch its own images would be an incomplete value and
+  /// every test double would have to know that.
+  final http.Client? _client;
+  final WebViewFetcher? _webViewFetcher;
+  http.Client? _lazyClient;
 
   /// URL and headers for one of this source's images, for a host that has to
   /// perform the fetch itself.
@@ -492,17 +494,19 @@ class Source {
     Uri url, {
     Map<String, String>? headers,
     void Function(SourceImageNotice notice)? onNotice,
-  }) {
-    final op = _imageBytes;
-    if (op == null) {
-      throw StateError(
-        'Source "${info.id}" was built without an image fetcher. Builders '
-        '(htmlSource/apiSource) wire one; a hand-composed Source must pass '
-        'imageBytes: to use this.',
-      );
-    }
-    return op(url, headers: headers, onNotice: onNotice);
-  }
+    void Function(int received, int? total)? onProgress,
+  }) => fetchSourceImage(
+    url,
+    client: _client ?? (_lazyClient ??= http.Client()),
+    headers: headers ?? imageRequest(url).headers,
+    webViewFetcher: _webViewFetcher,
+    warmByUrl: warmImageByUrl,
+    viaImgTag: warmImageViaImgTag,
+    baseUrl: info.baseUrl,
+    throttle: _throttle,
+    onNotice: onNotice,
+    onProgress: onProgress,
+  );
 
   /// Mirrors `SourceConfig.warmImageByUrl`. See
   /// `WebViewFetcher.fetchBytes`'s `warmByUrl` param. False (the default)

@@ -64,22 +64,56 @@ Future<Uint8List> fetchSourceImage(
   String baseUrl = '',
   Future<void> Function()? throttle,
   void Function(SourceImageNotice notice)? onNotice,
+  void Function(int received, int? total)? onProgress,
 }) async {
   await throttle?.call();
 
   http.Response? response;
   try {
-    response = await client.get(url, headers: headers).withRequestTimeout(url);
+    // Streamed rather than a plain get so callers can report real download
+    // progress. A reader showing a determinate progress bar per page needs
+    // this; collapsing it to a single future would silently turn every page
+    // into an indeterminate spinner.
+    final request = http.Request('GET', url)..headers.addAll(headers);
+    // Same cap RequestTimeout applies, spelled out because that extension is
+    // typed to Future<Response> and this send returns a streamed one.
+    final streamed = await client
+        .send(request)
+        .timeout(
+          sourceRequestTimeout,
+          onTimeout: () => throw http.ClientException(
+            'Timed out after ${sourceRequestTimeout.inSeconds}s',
+            url,
+          ),
+        );
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in streamed.stream) {
+      builder.add(chunk);
+      onProgress?.call(builder.length, streamed.contentLength);
+    }
+    response = http.Response.bytes(
+      builder.takeBytes(),
+      streamed.statusCode,
+      headers: streamed.headers,
+      request: streamed.request,
+      reasonPhrase: streamed.reasonPhrase,
+    );
   } on http.ClientException {
     // Swallowed only so the WebView still gets its turn below: a host whose
     // plain client is being blocked outright is exactly one this can recover.
     response = null;
   }
 
-  if (response != null &&
-      response.statusCode == 200 &&
-      !_isWall(response.bodyBytes)) {
-    return response.bodyBytes;
+  if (response != null && response.statusCode == 200) {
+    // Empty is a broken response, not a challenge. [classifyPageBody] calls it
+    // a wall — right for "never store this as a page", wrong here: routing it
+    // to the browser wastes tens of seconds and surfaces to the user as an
+    // offer to solve a challenge that was never served. Callers retry on a
+    // ClientException, which is the recovery this actually wants.
+    if (response.bodyBytes.isEmpty) {
+      throw http.ClientException('Empty image body', url);
+    }
+    if (!_isWall(response.bodyBytes)) return response.bodyBytes;
   }
 
   // A 200 that got here carried markup; that's a wall wearing a success code.
@@ -100,6 +134,14 @@ Future<Uint8List> fetchSourceImage(
         baseUrl: baseUrl,
       );
       if (bytes.isNotEmpty && !_isWall(bytes)) return bytes;
+    }
+    // Only a challenge-shaped response earns the challenge exception. A
+    // request that never completed is a transport failure, and calling it a
+    // challenge would be a lie with consequences: hosts branch on this type to
+    // offer an interactive solve, and a reader shown that instead of an
+    // ordinary error keeps a broken page it would otherwise just retry.
+    if (response == null) {
+      throw http.ClientException('Image request failed', url);
     }
     throw CloudflareChallengeException(url);
   }

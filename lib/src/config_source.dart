@@ -696,23 +696,12 @@ Source htmlSource(
       baseUrl: config.baseUrl,
       icon: config.icon,
     ),
+    // Transport for Source.imageBytes: the engine owns the fetch policy,
+    // this just hands it the wire.
+    client: engine.client,
+    webViewFetcher: engine.webViewFetcher,
     imageHeaders: engine.imageHeadersFor,
     throttle: engine.throttle,
-    // The one place a caller gets image bytes for this source. Everything it
-    // needs to decide *how* — the header set, the rate limit, whether a
-    // browser is available, which warm strategy this site needs — is closed
-    // over here rather than published for each caller to reassemble.
-    imageBytes: (url, {headers, onNotice}) => fetchSourceImage(
-      url,
-      client: engine.client,
-      headers: headers ?? engine.imageHeadersFor(url.toString()),
-      webViewFetcher: engine.webViewFetcher,
-      warmByUrl: config.warmImageByUrl,
-      viaImgTag: config.warmImageViaImgTag,
-      baseUrl: config.baseUrl,
-      throttle: engine.throttle,
-      onNotice: onNotice,
-    ),
     clearanceSink: (store) => engine.clearanceStore = store,
     localStoragePreferenceSink: (store) =>
         engine.localStoragePreferenceStore = store,
