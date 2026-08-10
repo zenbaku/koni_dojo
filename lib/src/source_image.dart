@@ -94,6 +94,7 @@ Future<Uint8List> fetchSourceImage(
   Future<void> Function()? throttle,
   void Function(SourceImageNotice notice)? onNotice,
   void Function(int received, int? total)? onProgress,
+  void Function(int status, Map<String, String> headers)? onResponse,
 }) async {
   await throttle?.call();
 
@@ -127,6 +128,11 @@ Future<Uint8List> fetchSourceImage(
       request: streamed.request,
       reasonPhrase: streamed.reasonPhrase,
     );
+    // Handed to the caller before any policy runs. A host's own answer —
+    // content-type, cf-mitigated, retry-after — is what tells an error page
+    // wearing a 200 from a challenge from a rate limit, and a caller that
+    // only sees the thrown result cannot recover any of it.
+    onResponse?.call(response.statusCode, response.headers);
   } on http.ClientException {
     // Swallowed only so the WebView still gets its turn below: a host whose
     // plain client is being blocked outright is exactly one this can recover.

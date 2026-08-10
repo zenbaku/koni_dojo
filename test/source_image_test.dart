@@ -302,6 +302,38 @@ void main() {
     });
   });
 
+  test('the response is handed to the caller, for diagnostics', () async {
+    // Losing these was the real cost of routing the reader through here: a
+    // caller that only sees the thrown result cannot tell an error page
+    // wearing a 200 from a challenge from a rate limit.
+    int? seenStatus;
+    Map<String, String>? seenHeaders;
+    await fetchSourceImage(
+      url,
+      client: clientReturning(200, _png, headers: {'content-type': 'image/png'}),
+      onResponse: (status, headers) {
+        seenStatus = status;
+        seenHeaders = headers;
+      },
+    );
+    expect(seenStatus, 200);
+    expect(seenHeaders?['content-type'], 'image/png');
+  });
+
+  test('a failing response is reported too, not only a successful one',
+      () async {
+    int? seenStatus;
+    await expectLater(
+      fetchSourceImage(
+        url,
+        client: clientReturning(429, Uint8List(0), headers: {'retry-after': '30'}),
+        onResponse: (status, _) => seenStatus = status,
+      ),
+      throwsA(isA<SourceImageException>()),
+    );
+    expect(seenStatus, 429, reason: 'a rate limit must reach the log');
+  });
+
   test('a browser fallback is announced, so it does not read as a hang',
       () async {
     final notices = <SourceImageNotice>[];

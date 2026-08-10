@@ -548,6 +548,7 @@ class Source {
     Map<String, String>? headers,
     void Function(SourceImageNotice notice)? onNotice,
     void Function(int received, int? total)? onProgress,
+    void Function(int status, Map<String, String> headers)? onResponse,
   }) => fetchSourceImage(
     url,
     client: _client ?? (_lazyClient ??= http.Client()),
@@ -567,6 +568,7 @@ class Source {
     throttle: _throttle,
     onNotice: onNotice,
     onProgress: onProgress,
+    onResponse: onResponse,
   );
 
   /// Mirrors `SourceConfig.warmImageByUrl`. See
