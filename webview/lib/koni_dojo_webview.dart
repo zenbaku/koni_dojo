@@ -4471,9 +4471,23 @@ class _InAppWebViewFetcher implements WebViewFetcher {
             url,
             headers: headers,
             localStorageSeed: localStorageSeed,
-            // The only caller that wants images off: this reads the DOM and
-            // nothing else, so rendering the page's artwork is pure waste.
-            blockImages: true,
+            // Images stay ON, and this is load-bearing rather than an
+            // oversight.
+            //
+            // Blocking them here looks free — a scrape reads the DOM, so why
+            // render artwork? Because some sites repair their own page with
+            // JavaScript that only runs *because* an image failed. natomanga
+            // ships every page as `src="…imgs-2…"` with an onerror handler
+            // that rewrites the host to a live one; the served markup carries
+            // both, and the DOM is only correct after the browser has tried
+            // the dead host and the handler has swapped it. With images
+            // blocked the <img> never loads, onerror never fires, the swap
+            // never happens, and the scrape captures 90 URLs that all 404.
+            //
+            // Measured, not assumed: the raw HTML for one chapter contains
+            // imgs-2 92 times and img-r1 193 times, and only img-r1 answers
+            // 200. Rendering the page is part of scraping it.
+            blockImages: false,
           ),
         );
       } catch (e, st) {
