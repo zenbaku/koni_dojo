@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -49,6 +50,25 @@ class SourceImageException implements http.ClientException {
   String toString() => 'SourceImageException: $message${uri == null ? '' : ', uri=$uri'}';
 }
 
+/// The caller stopped wanting these bytes — a chapter left, a screen closed.
+///
+/// **Not an error, and deliberately neither an [http.ClientException] nor a
+/// [SourceImageException].** Hosts retry the first (`getWithRetry` here, the
+/// app's page runner there) and branch on the second's
+/// [SourceImageException.isTransient]; a retry loop that caught this would
+/// re-run the exact fetch its caller just abandoned, which is the opposite of
+/// the intent. An abort is an expected outcome, so hosts should suppress it
+/// from error UI entirely rather than log it.
+class SourceImageAborted implements Exception {
+  SourceImageAborted(this.url);
+
+  /// The image that is no longer wanted.
+  final Uri url;
+
+  @override
+  String toString() => 'SourceImageAborted: the caller abandoned $url';
+}
+
 /// Why a fetch is taking much longer than a fetch should.
 enum SourceImageNotice {
   /// Fell back to driving a headless browser through a challenge, which can
@@ -82,7 +102,8 @@ enum SourceImageNotice {
 /// Throws [CloudflareChallengeException] when the host is walled and no
 /// browser recovered it, and [http.ClientException] for an ordinary transport
 /// or status failure. Those two are deliberately distinct: the first is worth
-/// offering the user an interactive solve, the second isn't.
+/// offering the user an interactive solve, the second isn't. [abort] adds a
+/// third, [SourceImageAborted], which is not a failure at all.
 Future<Uint8List> fetchSourceImage(
   Uri url, {
   required http.Client client,
@@ -95,8 +116,57 @@ Future<Uint8List> fetchSourceImage(
   void Function(SourceImageNotice notice)? onNotice,
   void Function(int received, int? total)? onProgress,
   void Function(int status, Map<String, String> headers)? onResponse,
+
+  /// Completes when the caller no longer wants these bytes.
+  ///
+  /// Optional and inert by default: a fetch with no [abort] behaves exactly as
+  /// it did before this existed. Only *speculative* work should pass one — a
+  /// reader preloading four pages ahead abandons all four on a chapter switch,
+  /// and without this every one of them runs to completion, holding a
+  /// connection for a caller that has gone.
+  ///
+  /// A plain future rather than a token type, deliberately: it composes with
+  /// [Future.any], a [Completer] satisfies it, and it adds no new vocabulary
+  /// to a package whose seams are all functions and futures.
+  ///
+  /// Honoured before the rate limit is taken, during it, around the request,
+  /// *during the response body* (the subscription is cancelled, which is what
+  /// closes the connection), and before the WebView recovery starts. Once the
+  /// bytes are in hand it is a no-op — they are returned.
+  Future<void>? abort,
 }) async {
-  await throttle?.call();
+  // One derived signal for the whole function rather than listening to [abort]
+  // in five places. An abort that completes with an *error* still counts: the
+  // caller's scope failing is not this fetch's business, and treating it as a
+  // live request would be the surprising reading.
+  var aborted = false;
+  final signal = abort?.then<void>(
+    (_) => aborted = true,
+    onError: (_) => aborted = true,
+  );
+
+  // Throws if the abort has landed, after giving it the one turn it needs to
+  // be visible: `then` on a completed future runs as a microtask, so [aborted]
+  // lags an abort by exactly one turn and reading it straight after a stretch
+  // of synchronous code would always see false. The microtask queue is FIFO,
+  // so one turn is enough. A fetch with no abort skips the yield and keeps its
+  // timing untouched.
+  Future<void> abortCheck() async {
+    if (signal == null) return;
+    await Future<void>.value();
+    if (aborted) throw SourceImageAborted(url);
+  }
+
+  // Before anything is spent. A fetch abandoned before it started must not
+  // take a rate-limit slot from one that is still wanted.
+  await abortCheck();
+
+  // Raced rather than merely checked: a limiter can hold this for seconds, and
+  // an abort arriving mid-wait shouldn't have to wait the slot out. The check
+  // above is the one that keeps an already-abandoned fetch from *taking* a
+  // slot — racing alone would still call `acquire`.
+  final throttling = throttle?.call();
+  if (throttling != null) await _untilAborted(throttling, signal, url);
 
   http.Response? response;
   try {
@@ -107,7 +177,7 @@ Future<Uint8List> fetchSourceImage(
     final request = http.Request('GET', url)..headers.addAll(headers);
     // Same cap RequestTimeout applies, spelled out because that extension is
     // typed to Future<Response> and this send returns a streamed one.
-    final streamed = await client
+    final sending = client
         .send(request)
         .timeout(
           sourceRequestTimeout,
@@ -116,11 +186,51 @@ Future<Uint8List> fetchSourceImage(
             url,
           ),
         );
-    final builder = BytesBuilder(copy: false);
-    await for (final chunk in streamed.stream) {
-      builder.add(chunk);
-      onProgress?.call(builder.length, streamed.contentLength);
+    final http.StreamedResponse streamed;
+    try {
+      streamed = await _untilAborted(sending, signal, url);
+    } on SourceImageAborted {
+      // The send is still in flight, and when it lands nobody will read it —
+      // an unread response stream holds its connection open. `listen(null)`
+      // then `cancel()`, never `drain()`: draining downloads the very body
+      // this abort exists to avoid downloading.
+      unawaited(
+        sending.then((r) => r.stream.listen(null).cancel(), onError: (_) {}),
+      );
+      rethrow;
     }
+    final builder = BytesBuilder(copy: false);
+    // An explicit subscription rather than `await for`, which cannot be
+    // cancelled from outside. Cancelling is the part that actually closes the
+    // connection: stopping the await alone would leave a megabyte streaming to
+    // a caller that has already gone — on web, base64-encoded and shipped
+    // through the browser process on the way.
+    final read = Completer<void>();
+    final sub = streamed.stream.listen(
+      (chunk) {
+        builder.add(chunk);
+        onProgress?.call(builder.length, streamed.contentLength);
+      },
+      onError: (Object error, StackTrace stack) {
+        if (!read.isCompleted) read.completeError(error, stack);
+      },
+      onDone: () {
+        if (!read.isCompleted) read.complete();
+      },
+      cancelOnError: true,
+    );
+    if (signal != null) {
+      unawaited(
+        signal.then((_) {
+          if (read.isCompleted) return;
+          // Cancel first, unblock second, and don't wait on the cancel: the
+          // caller is freed now while the connection closes behind it.
+          unawaited(sub.cancel());
+          read.completeError(SourceImageAborted(url));
+        }),
+      );
+    }
+    await read.future;
     response = http.Response.bytes(
       builder.takeBytes(),
       streamed.statusCode,
@@ -158,6 +268,16 @@ Future<Uint8List> fetchSourceImage(
       isCloudflareChallenge(response);
 
   if (walled) {
+    // The single worst thing to do for an abandoned page: the WebView has no
+    // cancellation of its own and can take tens of seconds, so an abort that
+    // landed while the wall was still arriving has to stop here — including
+    // one that landed during the synchronous stretch just above, which is why
+    // this goes through [abortCheck] rather than reading the flag. Ahead of
+    // [onNotice] as well: announcing a challenge-clear that never starts reads
+    // as a hang of its own. And ahead of the challenge exception, which hosts
+    // answer by offering the user an interactive solve — absurd for a page
+    // they have already left. Every post-abort outcome is the same type.
+    await abortCheck();
     final fetcher = webViewFetcher;
     if (fetcher != null) {
       onNotice?.call(SourceImageNotice.clearingChallenge);
@@ -182,6 +302,21 @@ Future<Uint8List> fetchSourceImage(
   }
 
   throw SourceImageException(response.statusCode, url);
+}
+
+/// [work], unless [signal] completes first — then [SourceImageAborted].
+///
+/// [signal] is listed first so that when both are already complete the abort
+/// still wins: [Future.any] registers its listeners in order onto a FIFO
+/// microtask queue. Losing futures are not left unhandled — `Future.any`
+/// attaches an error handler to every entry.
+///
+/// Only useful where the work has no cancellation of its own. Where it does —
+/// the response body — cancel it instead: this merely stops *waiting*, and a
+/// download nobody is waiting for is still a download.
+Future<T> _untilAborted<T>(Future<T> work, Future<void>? signal, Uri url) {
+  if (signal == null) return work;
+  return Future.any([signal.then<T>((_) => throw SourceImageAborted(url)), work]);
 }
 
 /// Asymmetric on purpose: only a body that positively looks like markup is

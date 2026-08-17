@@ -542,13 +542,23 @@ class Source {
   /// caller that will eventually get them wrong.
   ///
   /// Throws `CloudflareChallengeException` when the source is walled and no
-  /// browser recovered it; `http.ClientException` for ordinary failures.
+  /// browser recovered it; `http.ClientException` for ordinary failures;
+  /// `SourceImageAborted` when [abort] completes first, which is not a failure.
   Future<Uint8List> imageBytes(
     Uri url, {
     Map<String, String>? headers,
     void Function(SourceImageNotice notice)? onNotice,
     void Function(int received, int? total)? onProgress,
     void Function(int status, Map<String, String> headers)? onResponse,
+
+    /// Completes when the caller no longer wants these bytes; see
+    /// `fetchSourceImage`. Inert when absent, and for speculative work only —
+    /// a reader's preload, never a download the user asked for.
+    ///
+    /// Safe alongside [withSharedRequests]: that coalesces HTML bodies inside
+    /// the source engine, not images, so an abort here can never strand
+    /// another caller waiting on a shared response.
+    Future<void>? abort,
   }) => fetchSourceImage(
     url,
     client: _client ?? (_lazyClient ??= http.Client()),
@@ -569,6 +579,7 @@ class Source {
     onNotice: onNotice,
     onProgress: onProgress,
     onResponse: onResponse,
+    abort: abort,
   );
 
   /// Mirrors `SourceConfig.warmImageByUrl`. See

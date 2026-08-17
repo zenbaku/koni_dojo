@@ -5,6 +5,7 @@
 // four places in the host app. Each copy had its own idea of what counts as
 // failure and they had genuinely diverged, so a change to one of them could
 // break the others with everything green.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -61,6 +62,26 @@ class _RecordingFetcher implements WebViewFetcher {
 
   @override
   noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// A client whose response body the test feeds by hand, so a fetch can be
+/// aborted *while the body is still arriving*. [MockClient] cannot express
+/// that: it hands back a body that has already completely arrived.
+///
+/// Records the cancel, because that is the assertion separating a real abort
+/// from one that merely stops waiting while the download runs on regardless.
+class _HandFedClient extends http.BaseClient {
+  int sends = 0;
+  bool cancelled = false;
+  late final StreamController<List<int>> body = StreamController<List<int>>(
+    onCancel: () => cancelled = true,
+  );
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    sends++;
+    return http.StreamedResponse(body.stream, 200);
+  }
 }
 
 void main() {
@@ -355,6 +376,181 @@ void main() {
     );
     expect(fetcher.calls, 1);
     expect(bytes, _png);
+  });
+
+  group('abort', () {
+    /// Lets every pending microtask run.
+    Future<void> settle() => Future<void>.delayed(Duration.zero);
+
+    /// Counts what an abandoned fetch must not spend.
+    ({http.Client client, int Function() calls}) countingClient() {
+      var calls = 0;
+      return (
+        client: MockClient((_) async {
+          calls++;
+          return http.Response.bytes(_png, 200);
+        }),
+        calls: () => calls,
+      );
+    }
+
+    test('one already complete on entry spends nothing at all', () async {
+      final counted = countingClient();
+      var throttled = false;
+      await expectLater(
+        fetchSourceImage(
+          url,
+          client: counted.client,
+          throttle: () async => throttled = true,
+          abort: Future<void>.value(),
+        ),
+        throwsA(isA<SourceImageAborted>()),
+      );
+      expect(counted.calls(), 0);
+      expect(
+        throttled,
+        isFalse,
+        reason: 'a fetch nobody wants took a rate-limit slot from one wanted',
+      );
+    });
+
+    test('one arriving during the throttle throws before the request',
+        () async {
+      final counted = countingClient();
+      final abort = Completer<void>();
+      final fetch = fetchSourceImage(
+        url,
+        client: counted.client,
+        // A limiter that never lets go, so only the abort can end this wait.
+        throttle: () => Completer<void>().future,
+        abort: abort.future,
+      );
+      await settle();
+      abort.complete();
+      await expectLater(fetch, throwsA(isA<SourceImageAborted>()));
+      expect(counted.calls(), 0);
+    });
+
+    // The assertion this whole seam exists for. A `Future.any` that merely
+    // stopped *waiting* would pass every other test in this group while the
+    // page went on downloading to nobody.
+    test('one arriving mid-body cancels the subscription, not just the wait',
+        () async {
+      final client = _HandFedClient();
+      final abort = Completer<void>();
+      final fetch = fetchSourceImage(url, client: client, abort: abort.future);
+      client.body.add(_png.sublist(0, 8));
+      await settle();
+      expect(client.sends, 1, reason: 'the request should be in flight by now');
+      expect(client.cancelled, isFalse);
+
+      abort.complete();
+      await expectLater(fetch, throwsA(isA<SourceImageAborted>()));
+      await settle();
+      expect(
+        client.cancelled,
+        isTrue,
+        reason: 'the body kept downloading for a caller that had gone',
+      );
+    });
+
+    test('one arriving before the browser fallback never starts it', () async {
+      final fetcher = _RecordingFetcher(() => _png);
+      final abort = Completer<void>();
+      final notices = <SourceImageNotice>[];
+      await expectLater(
+        fetchSourceImage(
+          url,
+          client: clientReturning(200, _wall),
+          webViewFetcher: fetcher,
+          onNotice: notices.add,
+          // Fires with the body in hand and before any policy runs — exactly
+          // the window between "the wall arrived" and "drive a browser
+          // through it", which is the one this guard covers.
+          onResponse: (_, __) => abort.complete(),
+          abort: abort.future,
+        ),
+        throwsA(isA<SourceImageAborted>()),
+      );
+      expect(
+        fetcher.calls,
+        0,
+        reason: 'tens of seconds of browser for a page nobody wants',
+      );
+      expect(
+        notices,
+        isEmpty,
+        reason: 'announced a challenge-clear that never started',
+      );
+    });
+
+    test('one arriving with the bytes already in hand is a no-op', () async {
+      final abort = Completer<void>();
+      final bytes = await fetchSourceImage(
+        url,
+        client: clientReturning(200, _png),
+        onResponse: (_, __) => abort.complete(),
+        abort: abort.future,
+      );
+      expect(bytes, _png, reason: 'bytes already paid for were thrown away');
+    });
+
+    test('one that never completes is inert', () async {
+      final fetcher = _RecordingFetcher(() => _png);
+      final bytes = await fetchSourceImage(
+        url,
+        client: clientReturning(200, _wall),
+        webViewFetcher: fetcher,
+        abort: Completer<void>().future,
+      );
+      expect(bytes, _png);
+      expect(fetcher.calls, 1, reason: 'an inert abort changed the policy');
+    });
+
+    // Not an error of this fetch's making, but a scope that fails is a scope
+    // that is gone; treating it as still-wanted would be the surprise.
+    test('one that completes with an error still aborts', () async {
+      final counted = countingClient();
+      final abort = Completer<void>();
+      final fetch = fetchSourceImage(
+        url,
+        client: counted.client,
+        throttle: () => Completer<void>().future,
+        abort: abort.future,
+      );
+      await settle();
+      abort.completeError(StateError('the scope was disposed'));
+      await expectLater(fetch, throwsA(isA<SourceImageAborted>()));
+      expect(counted.calls(), 0);
+    });
+
+    // The retry loops downstream branch on these two, and an abort caught by
+    // either would be retried — re-running the fetch the caller just dropped.
+    test('is neither a ClientException nor a SourceImageException', () {
+      final aborted = SourceImageAborted(url);
+      expect(aborted, isNot(isA<http.ClientException>()));
+      expect(aborted, isNot(isA<SourceImageException>()));
+      expect(aborted, isA<Exception>());
+    });
+
+    test('reaches through Source.imageBytes', () async {
+      final source = htmlSource(
+        SourceConfig.fromJson({
+          'id': 'f',
+          'name': 'F',
+          'baseUrl': 'https://site.test',
+          'popular': {'path': '/p', 'itemSelector': 'a'},
+          'chapters': {'itemSelector': 'a'},
+          'pages': {'imageSelector': 'img'},
+        }),
+        client: clientReturning(200, _png),
+      );
+      await expectLater(
+        source.imageBytes(url, abort: Future<void>.value()),
+        throwsA(isA<SourceImageAborted>()),
+      );
+      expect(await source.imageBytes(url), _png, reason: 'no abort, no change');
+    });
   });
 
   test('imageRequest exposes the source\'s own headers for a native transport',
