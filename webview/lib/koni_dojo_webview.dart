@@ -76,6 +76,20 @@ WebViewFetcher? _fetcher;
 WebViewFetcher? createWebViewFetcher() =>
     cloudflareSolveSupported ? _fetcher ??= _InAppWebViewFetcher() : null;
 
+/// A fetcher whose idle teardown fires after [idleTimeout] instead of the
+/// production minute, and which is *not* the process singleton.
+///
+/// For tests only, and it takes an explicit timeout rather than exposing a
+/// mutable global because the property worth testing — that an unused WebView
+/// is actually released — is unobservable at the real timeout inside a test
+/// run, and a test that waits a minute to find out gets deleted rather than
+/// maintained.
+@visibleForTesting
+WebViewFetcher? createWebViewFetcherForTest({required Duration idleTimeout}) =>
+    cloudflareSolveSupported
+    ? _InAppWebViewFetcher(idleTimeout: idleTimeout)
+    : null;
+
 // ── Cookie-jar warming ───────────────────────────────────────────────────────
 
 /// Re-seeds the WebView's cookie jar with every (host, cookie header) in
@@ -4395,6 +4409,9 @@ final _blockImages = [
 /// WKWebView cookie jar with the solver, so a cleared host passes straight
 /// through. One WebView, navigations serialized.
 class _InAppWebViewFetcher implements WebViewFetcher {
+  _InAppWebViewFetcher({Duration? idleTimeout})
+    : _idleTimeout = idleTimeout ?? _defaultIdleTimeout;
+
   HeadlessInAppWebView? _webview;
   InAppWebViewController? _controller;
   Future<void> _chain = Future<void>.value();
@@ -4420,6 +4437,66 @@ class _InAppWebViewFetcher implements WebViewFetcher {
   /// blockers, so a stale `true` here would early-return and quietly render
   /// every image again for the rest of the session.
   bool? _imagesBlocked;
+
+  /// Fires once, [_idleTimeout] after the last fetch settled, to tear the
+  /// headless WebView down. One-shot and re-armed per fetch, never periodic:
+  /// a repeating timer is exactly the kind of background heartbeat this
+  /// package's host has none of, and it would cost what it is trying to save.
+  Timer? _idleTimer;
+
+  /// How long the WebView may sit unused before it is released.
+  ///
+  /// A WKWebView is a whole second browser process — it took 2.5 seconds to
+  /// launch on a real device — so it is worth keeping around across the run of
+  /// fetches that make up browsing a source or opening a chapter. It is not
+  /// worth keeping for the ten minutes it then takes to *read* that chapter,
+  /// which is what holding it for the process's lifetime meant. A minute is
+  /// long enough that consecutive user actions never pay the relaunch and
+  /// short enough that a reading session doesn't hold a browser open.
+  ///
+  /// Nothing session-shaped is lost by releasing it: cookies (`cf_clearance`
+  /// among them) live in the shared `WKWebsiteDataStore`, not in the instance,
+  /// which is the same reason [_resetWedgedWebView] can recreate one and keep
+  /// working. Per-instance state that *is* lost — the parked origin, the
+  /// content-blocker flag, the applied localStorage seeds — is reset here
+  /// alongside it so the next fetch re-establishes rather than assuming.
+  static const _defaultIdleTimeout = Duration(seconds: 60);
+
+  /// Overridable only so a test can observe the release without waiting a
+  /// minute for it; production always gets [_defaultIdleTimeout].
+  final Duration _idleTimeout;
+
+  /// Schedules the idle teardown, replacing any pending one.
+  void _armIdleRelease() {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(_idleTimeout, () {
+      // Onto the chain rather than straight away: every other entry point is
+      // serialized through it, and disposing out from under an in-flight
+      // navigation would fail that fetch rather than merely tidy up after it.
+      _chain = _chain.then((_) => _releaseIdle()).catchError((Object _) {});
+    });
+  }
+
+  /// Disposes the headless WebView and resets everything that described it.
+  Future<void> _releaseIdle() async {
+    final webview = _webview;
+    if (webview == null) return;
+    cfLog('WebViewFetcher: idle for ${_idleTimeout.inSeconds}s, releasing');
+    _webview = null;
+    _controller = null;
+    _currentOrigin = null;
+    _imagesBlocked = null;
+    // Seeds are written into an origin's `localStorage`, which is *not* in the
+    // instance — but re-applying one is cheap and skipping it wrongly is not,
+    // so the next fetch re-seeds rather than trusting a record that outlived
+    // the WebView that made it.
+    _appliedLocalStorageSeeds.clear();
+    try {
+      await webview.dispose();
+    } catch (e) {
+      cfLog('WebViewFetcher: idle release failed: $e');
+    }
+  }
 
   Future<void> _setImagesBlocked(
     InAppWebViewController controller,
@@ -4465,6 +4542,7 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     // Serialize: one WebView can only be on one page at a time.
     final result = Completer<String>();
     _chain = _chain.then((_) async {
+      _idleTimer?.cancel();
       try {
         result.complete(
           await _navigateAndRead(
@@ -4492,6 +4570,8 @@ class _InAppWebViewFetcher implements WebViewFetcher {
         );
       } catch (e, st) {
         result.completeError(e, st);
+      } finally {
+        _armIdleRelease();
       }
     });
     return result.future;
@@ -4507,6 +4587,7 @@ class _InAppWebViewFetcher implements WebViewFetcher {
   }) {
     final result = Completer<Uint8List>();
     _chain = _chain.then((_) async {
+      _idleTimer?.cancel();
       try {
         result.complete(
           await _fetchBytes(
@@ -4519,6 +4600,8 @@ class _InAppWebViewFetcher implements WebViewFetcher {
         );
       } catch (e, st) {
         result.completeError(e, st);
+      } finally {
+        _armIdleRelease();
       }
     });
     return result.future;
@@ -5035,6 +5118,7 @@ class _InAppWebViewFetcher implements WebViewFetcher {
             'WebViewFetcher: $url cleared after $pollCount polls, '
             'title="${polled.title}", ${polled.html.length}b, url=${polled.url}',
           );
+          await _haltAfterCapture(controller);
           return polled.html;
         }
       } else {
@@ -5052,8 +5136,39 @@ class _InAppWebViewFetcher implements WebViewFetcher {
       '${lastTransferSize == 0 ? " (served from cache!)" : ""}, '
       'startUrl=$startUrl',
     );
-    if (lastGood != null) return lastGood;
+    if (lastGood != null) {
+      await _haltAfterCapture(controller);
+      return lastGood;
+    }
     throw CloudflareChallengeException(Uri.parse(url));
+  }
+
+  /// Stops the page the moment its HTML is in hand.
+  ///
+  /// A scrape returns as soon as the DOM holds still, which is deliberately
+  /// well before the document has *finished* loading — `interactive` is
+  /// accepted, and a chapter page reaches it with every one of its page images
+  /// still in flight. Without this, nothing ever stops them: the fetcher parks
+  /// on that document for the rest of the session, so WebKit downloads and
+  /// decodes the entire chapter alongside the reader downloading and decoding
+  /// the same images itself. On a real device that was a second browser engine
+  /// running for the whole read, hundreds of failed WEBP decodes per chapter,
+  /// and a phone warm enough to notice.
+  ///
+  /// This is **not** the image blocking that was tried and reverted (see
+  /// [fetchHtml]'s `blockImages: false`). That broke scraping by preventing an
+  /// `onerror` repair from ever firing. Here the page has already loaded,
+  /// rendered, repaired itself and been read; stopping it afterwards cannot
+  /// change a result that has already been captured.
+  ///
+  /// Best-effort by design: the HTML is the caller's, and failing to tidy up
+  /// after it is not worth turning a successful scrape into an error.
+  Future<void> _haltAfterCapture(InAppWebViewController controller) async {
+    try {
+      await controller.stopLoading().timeout(_channelTimeout);
+    } catch (e) {
+      cfLog('WebViewFetcher: stopLoading after capture failed: $e');
+    }
   }
 
   /// Best-effort `location.href` of whatever's currently loaded, used only
@@ -5094,62 +5209,19 @@ class _InAppWebViewFetcher implements WebViewFetcher {
   >
   _pollOnce(InAppWebViewController controller) async {
     try {
-      final ready =
-          (await controller
-                  .evaluateJavascript(source: 'document.readyState')
-                  .timeout(_channelTimeout))
-              ?.toString() ??
-          '';
-      final title =
-          (await controller
-                  .evaluateJavascript(source: 'document.title')
-                  .timeout(_channelTimeout))
-              ?.toString() ??
-          '';
-      final url =
-          (await controller
-                  .evaluateJavascript(source: 'location.href')
-                  .timeout(_channelTimeout))
-              ?.toString() ??
-          '';
-      // A JSON API response has no real markup to render: the WebView's
-      // own raw-content viewer wraps it as the page's *only* content,
-      // `<body><pre>{...}</pre></body>`, so a step expecting `parse: json`
-      // would otherwise get that wrapper handed to jsonDecode instead of
-      // the JSON itself. HTML pages never legitimately consist of a single
-      // bare <pre> as the whole body, so this is a safe, general check, not
-      // a hack for any one site: every other (real) page still gets the
-      // full outerHTML unchanged.
-      final html =
-          (await controller
-                  .evaluateJavascript(
-                    source: '''
-(function() {
-  var b = document.body;
-  if (b && b.children.length === 1 && b.children[0].tagName === 'PRE') {
-    return b.children[0].textContent;
-  }
-  return document.documentElement.outerHTML;
-})()
-''',
-                  )
-                  .timeout(_channelTimeout))
-              ?.toString() ??
-          '';
-      final transferSizeRaw = await controller
-          .evaluateJavascript(
-            source:
-                "performance.getEntriesByType('navigation')[0]?.transferSize ?? -1",
-          )
+      final raw = await controller
+          .evaluateJavascript(source: _pollScript)
           .timeout(_channelTimeout);
-      final transferSize = transferSizeRaw is num
-          ? transferSizeRaw.toInt()
-          : int.tryParse('$transferSizeRaw');
+      final polled = raw is String
+          ? jsonDecode(raw) as Map<String, dynamic>
+          : raw as Map<dynamic, dynamic>?;
+      if (polled == null) return null;
+      final transferSize = (polled['transferSize'] as num?)?.toInt();
       return (
-        ready: ready,
-        title: title,
-        html: html,
-        url: url,
+        ready: polled['ready'] as String? ?? '',
+        title: polled['title'] as String? ?? '',
+        html: polled['html'] as String? ?? '',
+        url: polled['url'] as String? ?? '',
         transferSize: (transferSize != null && transferSize >= 0)
             ? transferSize
             : null,
@@ -5159,11 +5231,73 @@ class _InAppWebViewFetcher implements WebViewFetcher {
     }
   }
 
+  /// One poll's four reads in a single `evaluateJavascript`.
+  ///
+  /// Five separate round trips is what this replaced, one of them serializing
+  /// the whole document, every 400ms for up to 20 seconds of navigation — and
+  /// on every fetch a `webview: true` source makes, not just chapter opens.
+  ///
+  /// The document is only serialized when `readyState` says it is worth
+  /// reading, because that is the only case the caller looks at `html` in: a
+  /// poll below that bar is skipped before the markup is ever examined. An
+  /// unready poll therefore costs a few short strings instead of a few hundred
+  /// kilobytes marshalled across the platform channel and thrown away.
+  ///
+  /// A JSON API response has no real markup to render: the WebView's own
+  /// raw-content viewer wraps it as the page's *only* content,
+  /// `<body><pre>{...}</pre></body>`, so a step expecting `parse: json` would
+  /// otherwise get that wrapper handed to jsonDecode instead of the JSON
+  /// itself. HTML pages never legitimately consist of a single bare <pre> as
+  /// the whole body, so this is a safe, general check, not a hack for any one
+  /// site: every other (real) page still gets the full outerHTML unchanged.
+  ///
+  /// [transferSize] is the page's Resource Timing `transferSize`. `0` means
+  /// the browser served it entirely from its local cache rather than making a
+  /// network request, which the retry-after-solve path can't afford: a cached
+  /// copy of the *pre-solve* challenge page looks identical to a
+  /// genuinely-still-blocked one (same title, same byte count), and `loadUrl`'s
+  /// cache policy is set to bypass this, but if that policy ever stops working
+  /// (plugin regression, a platform quirk), this is what would tell us,
+  /// instead of another silent false "re-challenged".
+  ///
+  /// `url` (`location.href`) is what lets [_navigateAndReadOnce] tell a
+  /// completed navigation from a `loadUrl` that silently never left the
+  /// previous page, see its `stale` check.
+  ///
+  /// Returned as a JSON *string* rather than an object literal: what a
+  /// `evaluateJavascript` result decodes to varies by platform, and one
+  /// `jsonDecode` here is cheaper to reason about than four platform-typed
+  /// casts.
+  static const _pollScript = '''
+(function() {
+  var ready = document.readyState;
+  var html = '';
+  if (ready === 'complete' || ready === 'interactive') {
+    var b = document.body;
+    if (b && b.children.length === 1 && b.children[0].tagName === 'PRE') {
+      html = b.children[0].textContent;
+    } else {
+      html = document.documentElement.outerHTML;
+    }
+  }
+  var nav = performance.getEntriesByType('navigation')[0];
+  return JSON.stringify({
+    ready: ready,
+    title: document.title,
+    url: location.href,
+    html: html,
+    transferSize: (nav && nav.transferSize != null) ? nav.transferSize : -1
+  });
+})()
+''';
+
   /// Recreates the headless WebView after its platform channel stops
   /// responding. Disposing and letting the next [_ensure] build a fresh
   /// instance self-heals; without this, every future `webview:true` fetch
   /// in the session would keep retrying the same dead instance.
   Future<void> _resetWedgedWebView() async {
+    _idleTimer?.cancel();
+    _idleTimer = null;
     final webview = _webview;
     _webview = null;
     _controller = null;
@@ -5181,6 +5315,8 @@ class _InAppWebViewFetcher implements WebViewFetcher {
   /// [_resetWedgedWebView] for the equivalent teardown the wedge-recovery
   /// path actually uses.
   Future<void> dispose() async {
+    _idleTimer?.cancel();
+    _idleTimer = null;
     await _webview?.dispose();
     _webview = null;
     _controller = null;

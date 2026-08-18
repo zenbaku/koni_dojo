@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import 'publication_status.dart';
+import 'rate_limiter.dart';
 import 'source_image.dart';
 import 'web_view_fetcher.dart';
 
@@ -432,6 +433,8 @@ class Source {
     required SourceOps ops,
     Map<String, String> Function(String url)? imageHeaders,
     Future<void> Function()? throttle,
+    Future<void> Function()? imageThrottle,
+    int maxConcurrentImages = defaultMaxConcurrentImages,
     void Function(ClearanceStore?)? clearanceSink,
     void Function(LocalStoragePreferenceStore?)? localStoragePreferenceSink,
     http.Client? client,
@@ -446,6 +449,8 @@ class Source {
   }) : _ops = ops,
        _imageHeaders = imageHeaders,
        _throttle = throttle,
+       _imageThrottle = imageThrottle,
+       _imageGate = ConcurrencyGate(maxConcurrentImages),
        _clearanceSink = clearanceSink,
        _localStoragePreferenceSink = localStoragePreferenceSink,
        _client = client,
@@ -453,10 +458,32 @@ class Source {
        _beginShare = beginShare,
        _endShare = endShare;
 
+  /// Default cap on concurrent image fetches per source.
+  ///
+  /// Three, because a reader preloading around the current page asks for four
+  /// at once and wants them to arrive as roughly one burst rather than a
+  /// drip — while still being fewer connections than a browser opens per host
+  /// (six), and only one more than the host app's native download runner had
+  /// already settled on for the same CDN fetches.
+  static const int defaultMaxConcurrentImages = 3;
+
   final SourceInfo info;
   final SourceOps _ops;
   final Map<String, String> Function(String url)? _imageHeaders;
   final Future<void> Function()? _throttle;
+
+  /// Optional *extra* spacing for image fetches, on top of [_imageGate].
+  ///
+  /// Absent for every source that doesn't ask for it, which is the point: the
+  /// site's own [_throttle] deliberately does **not** reach images (see
+  /// [imageBytes]), and this is the escape hatch for the rare host whose CDN
+  /// genuinely does need a rate rather than a concurrency cap.
+  final Future<void> Function()? _imageThrottle;
+
+  /// Caps concurrent image fetches. See [ConcurrencyGate] for why images get
+  /// a cap rather than the spacing [_throttle] applies.
+  final ConcurrencyGate _imageGate;
+
   final void Function(ClearanceStore?)? _clearanceSink;
   final void Function(LocalStoragePreferenceStore?)?
   _localStoragePreferenceSink;
@@ -559,27 +586,36 @@ class Source {
     /// the source engine, not images, so an abort here can never strand
     /// another caller waiting on a shared response.
     Future<void>? abort,
-  }) => fetchSourceImage(
-    url,
-    client: _client ?? (_lazyClient ??= http.Client()),
-    // The source's own headers are the floor, the caller's layer over them.
-    //
-    // Never `headers ?? …`: a caller passing an empty map — which is what an
-    // ImageProvider's `headers = const {}` default is — is not null, so that
-    // form silently dropped the source's Referer and every page came back 403
-    // from a CDN that wanted nothing else. And a caller with a real per-page
-    // token still needs the site's Referer alongside it, so replacing is
-    // wrong even when the map is full.
-    headers: {...imageRequest(url).headers, ...?headers},
-    webViewFetcher: _webViewFetcher,
-    warmByUrl: warmImageByUrl,
-    viaImgTag: warmImageViaImgTag,
-    baseUrl: info.baseUrl,
-    throttle: _throttle,
-    onNotice: onNotice,
-    onProgress: onProgress,
-    onResponse: onResponse,
-    abort: abort,
+  }) => _imageGate.run(
+    () => fetchSourceImage(
+      url,
+      client: _client ?? (_lazyClient ??= http.Client()),
+      // The source's own headers are the floor, the caller's layer over them.
+      //
+      // Never `headers ?? …`: a caller passing an empty map — which is what an
+      // ImageProvider's `headers = const {}` default is — is not null, so that
+      // form silently dropped the source's Referer and every page came back 403
+      // from a CDN that wanted nothing else. And a caller with a real per-page
+      // token still needs the site's Referer alongside it, so replacing is
+      // wrong even when the map is full.
+      headers: {...imageRequest(url).headers, ...?headers},
+      webViewFetcher: _webViewFetcher,
+      warmByUrl: warmImageByUrl,
+      viaImgTag: warmImageViaImgTag,
+      baseUrl: info.baseUrl,
+      // Deliberately **not** [_throttle]. A config's `rateLimit` is a promise
+      // made to the *site*; a source's pages and covers routinely come from an
+      // unrelated CDN, and spacing those out is what pins a phone's radio for a
+      // whole reading session. Images are capped by [_imageGate] instead — see
+      // [ConcurrencyGate] for the measurement and the reasoning, and
+      // [_imageThrottle] for the per-source escape hatch when a CDN really does
+      // want a rate.
+      throttle: _imageThrottle,
+      onNotice: onNotice,
+      onProgress: onProgress,
+      onResponse: onResponse,
+      abort: abort,
+    ),
   );
 
   /// Mirrors `SourceConfig.warmImageByUrl`. See
@@ -675,7 +711,12 @@ class Source {
   Map<String, String> imageHeadersFor(String url) =>
       _imageHeaders?.call(url) ?? const {};
 
-  /// Completes when the next direct image request may be sent (rate limiting).
+  /// Completes when the next request to the **site** may be sent — the
+  /// config's declared `rateLimit`, applied to listings, search, details,
+  /// chapter lists and page lists.
+  ///
+  /// Not applied to image fetches, which take [ConcurrencyGate]'s cap instead;
+  /// see [imageBytes].
   Future<void> throttle() => _throttle?.call() ?? Future.value();
 
   ClearanceStore? _clearance;

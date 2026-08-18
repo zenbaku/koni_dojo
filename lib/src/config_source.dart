@@ -79,11 +79,21 @@ class _HtmlEngine {
            : RateLimiter(
                config.rateLimit!.requests,
                Duration(milliseconds: config.rateLimit!.perMs),
+             ),
+       _imageLimiter = config.imageRateLimit == null
+           ? null
+           : RateLimiter(
+               config.imageRateLimit!.requests,
+               Duration(milliseconds: config.imageRateLimit!.perMs),
              );
 
   final SourceConfig config;
   final http.Client client;
   final RateLimiter? _limiter;
+
+  /// Separate from [_limiter], and normally null — see
+  /// `SourceConfig.imageRateLimit`.
+  final RateLimiter? _imageLimiter;
 
   /// When the config is `webview: true`, page GETs go through this instead of
   /// [client] (real browser fingerprint + Cloudflare clearance). Null → fall
@@ -121,6 +131,10 @@ class _HtmlEngine {
   };
 
   Future<void> throttle() => _limiter?.acquire() ?? Future.value();
+
+  /// Null unless the config asked for image spacing, so `Source` can tell
+  /// "no extra rate" from "a rate of zero delay" and skip the await entirely.
+  Future<void> Function()? get imageThrottle => _imageLimiter?.acquire;
 
   /// Open share scopes. While any is open, identical GETs resolve to one
   /// in-flight request instead of repeating the fetch — see
@@ -752,6 +766,7 @@ Source htmlSource(
     endShare: engine.endShare,
     imageHeaders: engine.imageHeadersFor,
     throttle: engine.throttle,
+    imageThrottle: engine.imageThrottle,
     clearanceSink: (store) => engine.clearanceStore = store,
     localStoragePreferenceSink: (store) =>
         engine.localStoragePreferenceStore = store,

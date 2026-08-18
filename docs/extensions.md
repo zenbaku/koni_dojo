@@ -190,12 +190,30 @@ lifted from Mihon extension source need care:
 ### Rate limiting
 
 ```json
-"rateLimit": { "requests": 1, "perMs": 2000 }
+"rateLimit": { "requests": 1, "perMs": 1000 }
 ```
 
-Top-level; at most `requests` HTTP requests per `perMs` milliseconds to this
-source, enforced for listings, details, chapters, pages **and** image
-downloads.
+Top-level; at most `requests` HTTP requests per `perMs` milliseconds **to the
+site** — listings, search, details, chapter lists and page lists.
+
+**Image fetches are deliberately excluded.** A source's pages and covers
+routinely come from a CDN that never made this promise, and a limiter that
+enforces a *minimum spacing* is the single worst request pattern for a phone:
+radio energy is paid per transition out of idle, and requests a second apart
+never let the modem's tail expire, so it stays in its high-power state for a
+whole reading session. Measured on a real source, a reader's four preloaded
+pages took **6415 ms** spaced and **288 ms** unspaced, for identical bytes.
+Images take a concurrency cap instead (`ConcurrencyGate`, 3 at a time), which
+is fewer parallel connections than a browser opens per host.
+
+```json
+"imageRateLimit": { "requests": 1, "perMs": 500 }
+```
+
+The escape hatch, for the rare CDN that genuinely wants a rate rather than a
+cap. Optional, independent of `rateLimit`, and applied *in addition* to the
+concurrency cap. No curated config sets it; reach for it only with evidence
+that a host is rate-limiting image requests.
 
 ### Query sanitization
 

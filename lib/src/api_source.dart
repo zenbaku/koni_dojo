@@ -73,11 +73,21 @@ class _ApiEngine {
           : RateLimiter(
               config.rateLimit!.requests,
               Duration(milliseconds: config.rateLimit!.perMs),
+            ),
+      _imageLimiter = config.imageRateLimit == null
+          ? null
+          : RateLimiter(
+              config.imageRateLimit!.requests,
+              Duration(milliseconds: config.imageRateLimit!.perMs),
             );
 
   final ApiSourceConfig config;
   final http.Client client;
   final RateLimiter? _limiter;
+
+  /// Separate from [_limiter], and normally null — see
+  /// `SourceConfig.imageRateLimit`.
+  final RateLimiter? _imageLimiter;
 
   /// Cloudflare clearance to replay (cookie + matching UA), wired in after
   /// construction by the [Source] facade; null in standalone use. Looked up
@@ -99,6 +109,10 @@ class _ApiEngine {
   };
 
   Future<void> throttle() => _limiter?.acquire() ?? Future.value();
+
+  /// Null unless the config asked for image spacing, so `Source` can tell
+  /// "no extra rate" from "a rate of zero delay" and skip the await entirely.
+  Future<void> Function()? get imageThrottle => _imageLimiter?.acquire;
 
   Map<String, String> get _vars => {'lang': config.lang};
 
@@ -594,6 +608,7 @@ Source apiSource(ApiSourceConfig config, {http.Client? client}) {
     client: engine.client,
     imageHeaders: engine.imageHeadersFor,
     throttle: engine.throttle,
+    imageThrottle: engine.imageThrottle,
     clearanceSink: (store) => engine.clearanceStore = store,
     ops: SourceOps(
       popular: (q) => engine.fetchPopular(q.page),

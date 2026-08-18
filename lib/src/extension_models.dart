@@ -119,6 +119,7 @@ class SourceConfig implements AnySourceConfig {
     this.js = false,
     this.headers = const {},
     this.rateLimit,
+    this.imageRateLimit,
     required this.popular,
     this.latest,
     this.search,
@@ -152,6 +153,11 @@ class SourceConfig implements AnySourceConfig {
     headers: (json['headers'] as Map<String, dynamic>? ?? {}).map(
       (k, v) => MapEntry(k, v as String),
     ),
+    imageRateLimit: json['imageRateLimit'] == null
+        ? null
+        : RateLimitConfig.fromJson(
+            json['imageRateLimit'] as Map<String, dynamic>,
+          ),
     rateLimit: json['rateLimit'] == null
         ? null
         : RateLimitConfig.fromJson(json['rateLimit'] as Map<String, dynamic>),
@@ -277,6 +283,11 @@ class SourceConfig implements AnySourceConfig {
 
   /// Polite request budget for this site; null means unthrottled.
   final RateLimitConfig? rateLimit;
+
+  /// Extra spacing for **image** fetches, for the rare CDN that wants a rate
+  /// rather than the concurrency cap images get by default. Null (the normal
+  /// case) leaves image fetches capped but unspaced — see [RateLimitConfig].
+  final RateLimitConfig? imageRateLimit;
   final ListingConfig popular;
 
   /// "Latest updates" listing. Carried in the format for forward
@@ -322,6 +333,7 @@ class SourceConfig implements AnySourceConfig {
           .toList(),
     if (headers.isNotEmpty) 'headers': headers,
     if (rateLimit != null) 'rateLimit': rateLimit!.toJson(),
+    if (imageRateLimit != null) 'imageRateLimit': imageRateLimit!.toJson(),
     'popular': popular.toJson(),
     if (latest != null) 'latest': latest!.toJson(),
     if (search != null) 'search': search!.toJson(),
@@ -575,8 +587,14 @@ class FilterOptionConfig {
   Map<String, dynamic> toJson() => {'value': value, 'label': label};
 }
 
-/// At most [requests] HTTP requests to the source per [perMs] milliseconds,
-/// enforced across listings, details, chapters, pages and image downloads.
+/// At most [requests] HTTP requests to the **site** per [perMs] milliseconds,
+/// enforced across listings, search, details, chapters and page lists.
+///
+/// Deliberately not applied to image fetches. A source's pages and covers
+/// routinely come from a CDN that never made this promise, and spacing those
+/// requests out is what pins a phone's radio for a whole reading session;
+/// images take a concurrency cap instead (`ConcurrencyGate`). A host whose
+/// image CDN really does want a rate declares `imageRateLimit` separately.
 class RateLimitConfig {
   const RateLimitConfig({this.requests = 1, this.perMs = 1000});
 
@@ -1677,6 +1695,7 @@ class ApiSourceConfig implements AnySourceConfig {
     this.headers = const {},
     this.imageHeaders = const {},
     this.rateLimit,
+    this.imageRateLimit,
     this.manga = const ApiMangaSpec(),
     required this.popular,
     this.search,
@@ -1702,6 +1721,11 @@ class ApiSourceConfig implements AnySourceConfig {
     imageHeaders: (json['imageHeaders'] as Map<String, dynamic>? ?? {}).map(
       (k, v) => MapEntry(k, v as String),
     ),
+    imageRateLimit: json['imageRateLimit'] == null
+        ? null
+        : RateLimitConfig.fromJson(
+            json['imageRateLimit'] as Map<String, dynamic>,
+          ),
     rateLimit: json['rateLimit'] == null
         ? null
         : RateLimitConfig.fromJson(json['rateLimit'] as Map<String, dynamic>),
@@ -1746,6 +1770,10 @@ class ApiSourceConfig implements AnySourceConfig {
   /// Headers for fetching covers and pages; API CDNs usually need none.
   final Map<String, String> imageHeaders;
   final RateLimitConfig? rateLimit;
+
+  /// See `SourceConfig.imageRateLimit`. Null for every API source today: the
+  /// CDNs they read from are sized for browsers.
+  final RateLimitConfig? imageRateLimit;
   final ApiMangaSpec manga;
   final ApiListingConfig popular;
   final ApiListingConfig? search;
@@ -1770,6 +1798,7 @@ class ApiSourceConfig implements AnySourceConfig {
     if (headers.isNotEmpty) 'headers': headers,
     if (imageHeaders.isNotEmpty) 'imageHeaders': imageHeaders,
     if (rateLimit != null) 'rateLimit': rateLimit!.toJson(),
+    if (imageRateLimit != null) 'imageRateLimit': imageRateLimit!.toJson(),
     'manga': manga.toJson(),
     'popular': popular.toJson(),
     if (search != null) 'search': search!.toJson(),
