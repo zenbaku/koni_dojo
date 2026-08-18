@@ -15,6 +15,11 @@
 // index, so the upload is staged from a temp directory containing just the
 // index instead.
 //
+// The deploy branch comes from the workspace (`publish.cfBranch`, default
+// `main`), never from the git checkout this runs in — otherwise publishing from
+// a feature branch or a worktree lands a **preview** deployment while printing
+// "Deployment complete!" and exiting 0, leaving production on the old index.
+//
 // One-time setup: `npx wrangler login`, and create the project once with
 // `npx wrangler pages project create <cfProject>`.
 // ignore_for_file: avoid_print
@@ -45,7 +50,7 @@ Future<void> main(List<String> args) async {
     final sizeKb = (index.lengthSync() / 1024).round();
     print(
       'Publishing ${ws.repoIndex} ($sizeKb KB) → '
-      'Cloudflare Pages project "$project"',
+      'Cloudflare Pages project "$project", branch "${ws.publishBranch}"',
     );
     final proc = await Process.start('npx', [
       'wrangler',
@@ -53,6 +58,8 @@ Future<void> main(List<String> args) async {
       'deploy',
       staging.path,
       '--project-name=$project',
+      // Never inferred from git — see [Workspace.publishBranch].
+      '--branch=${ws.publishBranch}',
     ], mode: ProcessStartMode.inheritStdio);
     exit(await proc.exitCode);
   } finally {

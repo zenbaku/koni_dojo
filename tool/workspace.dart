@@ -95,4 +95,18 @@ class Workspace {
   /// Cloudflare Pages project for `task publish` (manifest `publish.cfProject`).
   String? get publishProject =>
       (manifest['publish'] as Map?)?['cfProject'] as String?;
+
+  /// The Pages **production** branch (manifest `publish.cfBranch`, default
+  /// `main`).
+  ///
+  /// Passed to `wrangler pages deploy --branch` explicitly, and that explicitness
+  /// is the whole point. Left off, wrangler infers the branch from whatever git
+  /// checkout it happens to run in, and a deploy from a feature branch or a
+  /// worktree silently becomes a **preview** — it prints "Deployment complete!",
+  /// exits 0, and production keeps serving the old index. That happened once and
+  /// took a URL fetch to notice, which is exactly the kind of failure nobody goes
+  /// looking for. What gets published must depend on the workspace, never on
+  /// which branch the person publishing it is standing on.
+  String get publishBranch =>
+      (manifest['publish'] as Map?)?['cfBranch'] as String? ?? 'main';
 }
