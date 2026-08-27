@@ -197,7 +197,7 @@ class _HtmlEngine {
     // ones, but a plain body must never satisfy an operation that was narrowed
     // to `webview` precisely because a plain body is not enough. Since
     // `webviewOps` exists, details and chapters can differ on the same URL —
-    // which is exactly MangaNato's series page.
+    // which is exactly the shape of one real source's series page.
     if (method == 'GET' && _shareDepth > 0) {
       final rendered = _rendersFor(op, document: document);
       final key = '$url\n$rendered\n${_sortedHeaderKey(extraHeaders)}';

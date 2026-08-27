@@ -4554,17 +4554,17 @@ class _InAppWebViewFetcher implements WebViewFetcher {
             //
             // Blocking them here looks free — a scrape reads the DOM, so why
             // render artwork? Because some sites repair their own page with
-            // JavaScript that only runs *because* an image failed. natomanga
-            // ships every page as `src="…imgs-2…"` with an onerror handler
-            // that rewrites the host to a live one; the served markup carries
-            // both, and the DOM is only correct after the browser has tried
-            // the dead host and the handler has swapped it. With images
+            // JavaScript that only runs *because* an image failed. One source
+            // ships every page with a dead image host in `src` and an onerror
+            // handler that rewrites it to a live one; the served markup
+            // carries both, and the DOM is only correct after the browser has
+            // tried the dead host and the handler has swapped it. With images
             // blocked the <img> never loads, onerror never fires, the swap
             // never happens, and the scrape captures 90 URLs that all 404.
             //
-            // Measured, not assumed: the raw HTML for one chapter contains
-            // imgs-2 92 times and img-r1 193 times, and only img-r1 answers
-            // 200. Rendering the page is part of scraping it.
+            // Measured, not assumed: the raw HTML for one chapter carries the
+            // dead host 92 times and the live one 193 times, and only the live
+            // one answers 200. Rendering the page is part of scraping it.
             blockImages: false,
           ),
         );

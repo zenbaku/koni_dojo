@@ -63,7 +63,7 @@
           "items": {
             "enum": ["popular", "latest", "search", "tag", "details", "chapters", "pages", "filters"]
           },
-          "description": "Which operations need a *rendered DOM* — content that does not exist in the response until the page's own script has built it. Absent means all of them (when webview is true). Almost always fewer: on MangaNato, measured 2026-08-26, only the chapter list differs from what a plain fetch returns, while the reader's own page list is identical — so [\"chapters\"] takes a browser page load off the reading path entirely. Worth narrowing because a browser page load is the slowest way to fetch anything, and on web it happens in a background tab whose timers are clamped to one wake per second and where requestAnimationFrame never fires at all. An engine that predates this key ignores it and renders everything, which is only the old behaviour."
+          "description": "Which operations need a *rendered DOM* — content that does not exist in the response until the page's own script has built it. Absent means all of them (when webview is true). Almost always fewer: measured against one real source, 2026-08-26, only the chapter list differs from what a plain fetch returns, while the reader's own page list is identical — so [\"chapters\"] takes a browser page load off the reading path entirely. Worth narrowing because a browser page load is the slowest way to fetch anything, and on web it happens in a background tab whose timers are clamped to one wake per second and where requestAnimationFrame never fires at all. An engine that predates this key ignores it and renders everything, which is only the old behaviour."
         },
         "challengesPlainClients": {
           "type": "boolean",

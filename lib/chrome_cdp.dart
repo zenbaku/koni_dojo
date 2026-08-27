@@ -17,8 +17,8 @@
 ///
 /// ## What it does NOT do: defeat Cloudflare
 ///
-/// It was built hoping it would, and it does not. Measured against natomanga,
-/// one variable at a time, same machine and IP:
+/// It was built hoping it would, and it does not. Measured against a
+/// Cloudflare-walled source, one variable at a time, same machine and IP:
 ///
 /// | setup                                            | challenge clears? |
 /// |--------------------------------------------------|-------------------|
@@ -283,8 +283,8 @@ class ChromeCdpFetcher implements WebViewFetcher {
     fetcher._sessionId = attached['sessionId'] as String;
     // Deliberately no Page.enable / Runtime.enable. Enabling the Runtime
     // domain is a documented bot-detection signal — Cloudflare probes for its
-    // side effects — and with it on, natomanga's *non-interactive* managed
-    // challenge never cleared: a verification page with nothing to click,
+    // side effects — and with it on, a walled source's *non-interactive*
+    // managed challenge never cleared: a page with nothing to click,
     // spinning until the deadline. Neither domain is needed here, because
     // this polls with Runtime.evaluate and Page.navigate rather than
     // subscribing to events, and both work without their domain enabled.

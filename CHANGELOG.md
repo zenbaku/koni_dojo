@@ -29,13 +29,13 @@ breaking, so this classifies as a MINOR release when cut.
   a hard `as bool?` cast, and `loadInstalled` catches the resulting `TypeError`
   by dropping the whole extension — a narrowed config would have made the
   source silently vanish from every install that hadn't updated. Verified
-  against the previously pinned build: it reads the narrowed natomanga config,
+  against the previously pinned build: it reads a narrowed real config,
   sees `webview: true`, and renders everything, which is only the old
   behaviour. So a narrowed config can ship without waiting on app releases.
 
-  The flag was all-or-nothing while the need almost never is: on MangaNato,
-  measured 2026-08-26, only the chapter list differs between a plain fetch and
-  a rendered page (2 `<option>` entries against 2754), while the *reader's*
+  The flag was all-or-nothing while the need almost never is: on one real
+  source, measured 2026-08-26, only the chapter list differs between a plain
+  fetch and a rendered page (2 `<option>` entries against 2754), while the
   page list is identical either way — so the hottest path in the app was
   paying a full browser page load per chapter for markup it already had. That
   is expensive natively and much worse on web, where the renderer is a
@@ -56,9 +56,9 @@ breaking, so this classifies as a MINOR release when cut.
 
   What it unlocks is bigger than the bug it prevents: a config can move an
   endpoint onto its site's own JSON API without breaking the platforms where
-  `webview` is doing real work. MangaNato's chapter list turned out to be
-  exactly that — `GET /api/manga/{slug}/chapters?limit=2000`, which answers a
-  plain client with 200 while the site's HTML pages answer 403 — so its whole
+  `webview` is doing real work. One real source's chapter list turned out to
+  be exactly that — a paginated JSON endpoint that answers a plain client with
+  200 while the site's HTML pages answer 403 — so its whole
   chapter list is one request and needs no browser anywhere. Measured live
   through the shipped config with a plain HTTP client: **1377 chapters in
   1146 ms**, against two browser page loads before.

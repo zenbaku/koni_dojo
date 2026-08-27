@@ -254,9 +254,10 @@ class SourceConfig implements AnySourceConfig {
   /// **Per operation, because "this source needs a browser" is almost never
   /// true of the whole source.** `webview: true` alone means every operation,
   /// which is what it always meant; the `webviewOps` key narrows it. On
-  /// MangaNato, measured 2026-08-26, only the chapter list differs from what a
-  /// plain fetch returns (`<option>` entries: 2 in the response, 2754 in the
-  /// live DOM) — while the reader's own page list is *identical* in both.
+  /// one real source, measured 2026-08-26, only the chapter list differs from
+  /// what a plain fetch returns (`<option>` entries: 2 in the response, 2754
+  /// in the live DOM) — while the reader's own page list is *identical* in
+  /// both.
   /// Rendering it anyway put a browser page load on the reading path for
   /// content that was already in hand, and a background tab is the slowest
   /// possible place to put one: its timers are clamped to one per second and

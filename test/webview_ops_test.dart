@@ -3,9 +3,9 @@
 // `webview` used to be one bool for the whole source, so declaring it for the
 // one endpoint that needs script put a browser page load on *every* request —
 // including the reader's page list, which is the hottest path there is. On
-// MangaNato, measured 2026-08-26, the chapter list is the only thing a plain
-// fetch gets wrong (2 `<option>` entries against 2754 in the live DOM) while
-// the reader's page list comes back identical either way.
+// one real source, measured 2026-08-26, the chapter list is the only thing a
+// plain fetch gets wrong (2 `<option>` entries against 2754 in the live DOM)
+// while the reader's page list comes back identical either way.
 //
 // Cheap on native and ruinous on web, where the renderer is a background tab:
 // its timers are clamped to one per second and `requestAnimationFrame` never
@@ -421,8 +421,8 @@ void main() {
    *
    * Not a nicety — it is what lets a config move an endpoint onto its site's
    * own JSON API without breaking the platforms where `webview` is doing real
-   * work. MangaNato's chapter list is exactly that: a JSON API that answers a
-   * plain client with 200 while its HTML pages answer 403.
+   * work. One real source's chapter list is exactly that: a JSON API that
+   * answers a plain client with 200 while its HTML pages answer 403.
    */
   group('a JSON step is never rendered', () {
     /// A source whose chapters come from a JSON endpoint, on a host that walls

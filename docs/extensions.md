@@ -241,7 +241,7 @@ operation needs a rendered DOM, and the host walls plain clients. Adding
 narrowed source keeps `webview: true` rather than dropping it.
 
 **Narrow it.** "This source needs a browser" is almost never true of the whole
-source. On MangaNato, measured 2026-08-26:
+source. Measured against one real source, 2026-08-26:
 
 | endpoint | selector | plain fetch | rendered |
 |---|---|---|---|
