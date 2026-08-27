@@ -41,6 +41,7 @@ Future<void> main(List<String> args) async {
     String method = 'GET',
     String body = '',
     Map<String, String> headers = const {},
+    bool document = true,
   }) async {
     final res = await client.get(
       Uri.parse(url),

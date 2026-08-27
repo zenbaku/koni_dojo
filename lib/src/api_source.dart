@@ -163,6 +163,9 @@ class _ApiEngine {
     String method = 'GET',
     String body = '',
     Map<String, String> headers = const {},
+    // The API dialect never renders, so this is only here to satisfy
+    // [StepFetch]; see its doc.
+    bool document = true,
   }) async {
     final uri = Uri.parse(url);
     final merged = {

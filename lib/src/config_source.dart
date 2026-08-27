@@ -73,7 +73,9 @@ class _HtmlEngine {
     http.Client? client,
     this.webViewFetcher,
     this.jsRunner,
-  }) : client = client ?? http.Client(),
+    bool Function()? clientIsBrowserSession,
+  }) : clientIsBrowserSession = clientIsBrowserSession ?? _never,
+       client = client ?? http.Client(),
        _limiter = config.rateLimit == null
            ? null
            : RateLimiter(
@@ -104,6 +106,26 @@ class _HtmlEngine {
   /// where no runtime is available; a config with a `js` step then surfaces a
   /// clear [JsUnavailable] instead of half-working.
   final JsRunner? jsRunner;
+
+  /// Whether [client] fetches from inside the user's own browser session —
+  /// its cookies, its User-Agent, a request shape a site reads as its own
+  /// page's.
+  ///
+  /// Answers `SourceConfig.challengesPlainClients` and nothing else: a client
+  /// like that is already past the wall, so only the operations that need a
+  /// *rendered DOM* still need the browser. Always false where a plain HTTP
+  /// client is doing the fetching, which is every native build.
+  ///
+  /// **Asked per request, not once.** It describes a transport that can change
+  /// underneath a long-lived source: the browser extension's cookie grant is a
+  /// setting the user can revoke mid-session, and the extension client falls
+  /// through to a relay when its worker cannot be reached. Both make a
+  /// remembered `true` wrong in the dangerous direction — the engine would go
+  /// on skipping renders for a client that is no longer past the wall, and the
+  /// source would start answering 403 with no way back.
+  final bool Function() clientIsBrowserSession;
+
+  static bool _never() => false;
 
   /// Cloudflare clearance to replay (cookie + matching UA), wired in after
   /// construction by the [Source] facade; null in standalone use. Looked up
@@ -159,6 +181,8 @@ class _HtmlEngine {
   /// own, the path declarative sources take for AJAX-only endpoints.
   Future<String> _fetchBody(
     String url, {
+    required SourceOp op,
+    bool document = true,
     String method = 'GET',
     String body = '',
     Map<String, String> extraHeaders = const {},
@@ -167,12 +191,22 @@ class _HtmlEngine {
     // URL with the same headers. A screen that loads details and then chapters
     // asks for the identical page twice; on a `webview: true` source that was
     // two full browser navigations for one screen.
+    //
+    // Keyed by *how* the body is obtained, not by which operation asked: two
+    // rendered fetches of one URL are interchangeable, and so are two plain
+    // ones, but a plain body must never satisfy an operation that was narrowed
+    // to `webview` precisely because a plain body is not enough. Since
+    // `webviewOps` exists, details and chapters can differ on the same URL —
+    // which is exactly MangaNato's series page.
     if (method == 'GET' && _shareDepth > 0) {
-      final key = '$url\n${_sortedHeaderKey(extraHeaders)}';
+      final rendered = _rendersFor(op, document: document);
+      final key = '$url\n$rendered\n${_sortedHeaderKey(extraHeaders)}';
       final shared = _shared[key];
       if (shared != null) return shared;
       final pending = _fetchBodyUncached(
         url,
+        op: op,
+        document: document,
         method: method,
         body: body,
         extraHeaders: extraHeaders,
@@ -182,10 +216,34 @@ class _HtmlEngine {
     }
     return _fetchBodyUncached(
       url,
+      op: op,
+      document: document,
       method: method,
       body: body,
       extraHeaders: extraHeaders,
     );
+  }
+
+  /// Whether [op]'s GETs go through the browser on this build.
+  ///
+  /// Both halves matter: the config has to ask for it *and* this platform has
+  /// to have a renderer. Web without the companion extension has none, which
+  /// is why this is not simply `config.webviewFor(op)`.
+  bool _rendersFor(SourceOp op, {bool document = true}) {
+    if (webViewFetcher == null) return false;
+    /* A browser navigation always yields a document. Asking it for a JSON
+     * endpoint returns that JSON wrapped in `<html><body><pre>`, which the
+     * decoder cannot read — so a step that wants JSON takes the HTTP client
+     * whatever the config says, and a source can move an endpoint to its
+     * site's own JSON API without that breaking the platforms where the
+     * config's `webview` is doing real work. */
+    if (!document) return false;
+    // The config says this operation's content isn't in the response at all.
+    // No client gets past that, however good its session.
+    if (config.webviewFor(op)) return true;
+    // Otherwise it is only the wall, which a browser-session client is
+    // already through.
+    return config.challengesPlainClients && !clientIsBrowserSession();
   }
 
   static String _sortedHeaderKey(Map<String, String> headers) {
@@ -195,6 +253,8 @@ class _HtmlEngine {
 
   Future<String> _fetchBodyUncached(
     String url, {
+    required SourceOp op,
+    bool document = true,
     String method = 'GET',
     String body = '',
     Map<String, String> extraHeaders = const {},
@@ -208,7 +268,7 @@ class _HtmlEngine {
     };
     // CF-hard hosts: fetch GETs through the WebView (browser fingerprint +
     // cleared session): cookie-replay over plain HTTP gets re-challenged.
-    if (config.webview && webViewFetcher != null && method == 'GET') {
+    if (_rendersFor(op, document: document) && method == 'GET') {
       await throttle();
       final seed = effectiveLocalStorageSeed(
         config,
@@ -234,12 +294,14 @@ class _HtmlEngine {
 
   Future<Document> _fetchDocument(
     String url, {
+    required SourceOp op,
     String method = 'GET',
     String body = '',
     Map<String, String> extraHeaders = const {},
   }) async => html_parser.parse(
     await _fetchBody(
       url,
+      op: op,
       method: method,
       body: body,
       extraHeaders: extraHeaders,
@@ -300,6 +362,7 @@ class _HtmlEngine {
     ListingConfig listing,
     int page,
     String query, {
+    required SourceOp op,
     FilterSelection? filters,
     bool pathSafeQuery = false,
     String Function(String url)? applyExtraParams,
@@ -351,8 +414,21 @@ class _HtmlEngine {
             : Uri.encodeQueryComponent(sanitized),
       },
       baseUrl: base,
-      fetch: (u, {method = 'GET', body = '', headers = const {}}) =>
-          _fetchBody(u, method: method, body: body, extraHeaders: headers),
+      fetch:
+          (
+            u, {
+            method = 'GET',
+            body = '',
+            headers = const {},
+            document = true,
+          }) => _fetchBody(
+            u,
+            op: op,
+            document: document,
+            method: method,
+            body: body,
+            extraHeaders: headers,
+          ),
     );
     final items = <SourceManga>[];
     for (final record in result.records) {
@@ -429,7 +505,7 @@ class _HtmlEngine {
   ]);
 
   Future<CatalogPage> fetchPopular(int page) =>
-      _fetchListing(config.popular, page, '');
+      _fetchListing(config.popular, page, '', op: SourceOp.popular);
 
   bool get hasFilters => config.search != null && config.filters.isNotEmpty;
 
@@ -458,7 +534,10 @@ class _HtmlEngine {
     final from = filter.optionsFrom;
     if (from != null && from.itemSelector.isNotEmpty) {
       try {
-        final doc = await _fetchDocument(absoluteUrl(from.path));
+        final doc = await _fetchDocument(
+          absoluteUrl(from.path),
+          op: SourceOp.filters,
+        );
         final discovered = <FilterOption>[];
         for (final element in doc.querySelectorAllExt(from.itemSelector)) {
           final value = _attr(element, '', from.valueAttr);
@@ -494,7 +573,13 @@ class _HtmlEngine {
     if (search == null) {
       return Future.value(CatalogPage(items: [], hasNextPage: false));
     }
-    return _fetchListing(search, page, query, filters: filters);
+    return _fetchListing(
+      search,
+      page,
+      query,
+      op: SourceOp.search,
+      filters: filters,
+    );
   }
 
   /// Exact-match browse for one or more already-known tag values; see
@@ -517,6 +602,7 @@ class _HtmlEngine {
       tag,
       page,
       included.first,
+      op: SourceOp.tag,
       pathSafeQuery: true,
       applyExtraParams: (url) => _applyTagParams(tag, url, included, excluded),
     );
@@ -542,8 +628,21 @@ class _HtmlEngine {
           Pipeline([const Step(request: StepRequest(base: 'mangaUrl'))]),
       {'baseUrl': base, 'mangaUrl': absoluteUrl(manga.url)},
       baseUrl: base,
-      fetch: (url, {method = 'GET', body = '', headers = const {}}) =>
-          _fetchBody(url, method: method, body: body, extraHeaders: headers),
+      fetch:
+          (
+            url, {
+            method = 'GET',
+            body = '',
+            headers = const {},
+            document = true,
+          }) => _fetchBody(
+            url,
+            op: SourceOp.details,
+            document: document,
+            method: method,
+            body: body,
+            extraHeaders: headers,
+          ),
     );
     // documentElement (not .body): a selector can target <head> content (e.g.
     // meta[property="og:image"]). Jsoup-ported selectors expect that reach.
@@ -667,8 +766,21 @@ class _HtmlEngine {
       {'baseUrl': base, 'mangaUrl': absoluteUrl(manga.url)},
       baseUrl: base,
       js: jsRunner,
-      fetch: (url, {method = 'GET', body = '', headers = const {}}) =>
-          _fetchBody(url, method: method, body: body, extraHeaders: headers),
+      fetch:
+          (
+            url, {
+            method = 'GET',
+            body = '',
+            headers = const {},
+            document = true,
+          }) => _fetchBody(
+            url,
+            op: SourceOp.chapters,
+            document: document,
+            method: method,
+            body: body,
+            extraHeaders: headers,
+          ),
     );
     final chapters = <SourceChapter>[];
     for (final record in result.records) {
@@ -702,8 +814,21 @@ class _HtmlEngine {
       vars,
       baseUrl: baseUrl,
       js: jsRunner,
-      fetch: (url, {method = 'GET', body = '', headers = const {}}) =>
-          _fetchBody(url, method: method, body: body, extraHeaders: headers),
+      fetch:
+          (
+            url, {
+            method = 'GET',
+            body = '',
+            headers = const {},
+            document = true,
+          }) => _fetchBody(
+            url,
+            op: SourceOp.pages,
+            document: document,
+            method: method,
+            body: body,
+            extraHeaders: headers,
+          ),
     );
 
     final pages = config.pages;
@@ -743,12 +868,14 @@ Source htmlSource(
   http.Client? client,
   WebViewFetcher? webViewFetcher,
   JsRunner? jsRunner,
+  bool Function()? clientIsBrowserSession,
 }) {
   final engine = _HtmlEngine(
     config,
     client: client,
     webViewFetcher: webViewFetcher,
     jsRunner: jsRunner,
+    clientIsBrowserSession: clientIsBrowserSession,
   );
   return Source(
     info: SourceInfo(

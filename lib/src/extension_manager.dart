@@ -67,6 +67,7 @@ class ExtensionManager {
     http.Client? client,
     JsRunner? jsRunner,
     WebViewFetcher? webViewFetcher,
+    this.clientIsBrowserSession,
   }) : client = client ?? http.Client(),
        _js = jsRunner,
        _webView = webViewFetcher;
@@ -80,9 +81,16 @@ class ExtensionManager {
   /// tests/web → js-gated sources error clearly instead of running.
   final JsRunner? _js;
 
-  /// The app's WebView transport for `webview:true` (CF-hard) sources. Null in
-  /// tests/web → those sources fall back to the HTTP client.
+  /// The app's WebView transport for a config's `webview` operations. Null in
+  /// tests/web-without-the-extension → those sources fall back to the HTTP
+  /// client.
   final WebViewFetcher? _webView;
+
+  /// Whether [client] fetches from inside the user's own browser session, asked
+  /// per request rather than remembered. See `_HtmlEngine`'s field of the same
+  /// name for why it has to be a question; null (the default) is a plain HTTP
+  /// client, which is every native build.
+  final bool Function()? clientIsBrowserSession;
 
   /// Per-host Cloudflare clearances, wired into every source [buildSource]
   /// builds so a challenge solved once in the WebView replays across requests.
@@ -353,6 +361,7 @@ class ExtensionManager {
       client: client,
       webViewFetcher: _webView,
       jsRunner: _js,
+      clientIsBrowserSession: clientIsBrowserSession,
     ),
   })
     ..clearanceStore = clearance

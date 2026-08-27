@@ -47,7 +47,7 @@ it technically could break code that imported it directly.
 ## Injected seams (implement these in the app)
 
 - **`ClearanceStore`**: replay a host's Cloudflare clearance.
-- **`WebViewFetcher`**: WebView transport for `webview: true` sources
+- **`WebViewFetcher`**: browser transport for a config's `webview` operations
   (implemented by the separate `koni_dojo_webview` package, along with
   `openLoginSession`, `solveCloudflare`, `warmCookieJar`,
   `createWebViewFetcher`, `cloudflareSolveSupported`).

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zenbaku.github.io/koni_dojo/source-config.schema.json",
-  "x-engineVersion": "0.2.0",
+  "x-engineVersion": "0.3.0",
   "title": "Dojo extension file",
   "description": "An extensions/*.json file: one extension's metadata plus its source(s). Mirrors lib/src/extension_models.dart (the authoritative model) and docs/extensions.md (the prose walkthrough). x-engineVersion is the koni_dojo package version (see pubspec.yaml) this schema was last verified against — bump both together whenever the schema's shape changes; test/schema_sync_test.dart checks this file's properties against every config class's actual toJson() field set, so a Dart-side field with no matching schema entry (or vice versa) fails the test suite instead of silently shipping.",
   "type": "object",
@@ -55,7 +55,20 @@
         "webview": {
           "type": "boolean",
           "default": false,
-          "description": "Route this source's page GETs through the app's WebView (real browser fingerprint + Cloudflare clearance) instead of the HTTP client — for hosts whose Cloudflare mode re-challenges cookie-replay from a non-browser client."
+          "description": "Whether this source needs a real browser at all — a WebView natively, a background tab through the companion extension on web — instead of the HTTP client. On its own it means every operation does, and it implies challengesPlainClients, which is what it has always meant. Narrow it with webviewOps rather than turning it off. Deliberately still a boolean: an engine that predates webviewOps parses this key with a hard cast and drops the whole extension when it isn't one."
+        },
+        "webviewOps": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["popular", "latest", "search", "tag", "details", "chapters", "pages", "filters"]
+          },
+          "description": "Which operations need a *rendered DOM* — content that does not exist in the response until the page's own script has built it. Absent means all of them (when webview is true). Almost always fewer: on MangaNato, measured 2026-08-26, only the chapter list differs from what a plain fetch returns, while the reader's own page list is identical — so [\"chapters\"] takes a browser page load off the reading path entirely. Worth narrowing because a browser page load is the slowest way to fetch anything, and on web it happens in a background tab whose timers are clamped to one wake per second and where requestAnimationFrame never fires at all. An engine that predates this key ignores it and renders everything, which is only the old behaviour."
+        },
+        "challengesPlainClients": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this host refuses a client that isn't a real browser session — a Cloudflare mode that re-challenges cookie replay from a plain HTTP client. Implied by `webview: true`; set it explicitly when narrowing `webview` to a list, or the narrowed operations move onto a client the host will 403. Unlike `webview` this is not a property of the content but of the transport, so it is answered per platform: a native HTTP client is never a browser session, while the web build's companion extension (with cookies granted) is."
         },
         "warmImageByUrl": {
           "type": "boolean",

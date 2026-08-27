@@ -215,6 +215,68 @@ cap. Optional, independent of `rateLimit`, and applied *in addition* to the
 concurrency cap. No curated config sets it; reach for it only with evidence
 that a host is rate-limiting image requests.
 
+### Rendering in a browser (`webview`)
+
+```json
+"webview": true,
+"webviewOps": ["chapters"]
+```
+
+Two unrelated reasons a config needs a real browser, and they want separate
+answers:
+
+- **The content isn't in the response.** The page builds it with script, and
+  no client can fix that. `webviewOps` names the operations where that is
+  true.
+- **The host refuses a client that isn't a browser.** A Cloudflare mode that
+  re-challenges cookie replay. `challengesPlainClients` says so, and *which*
+  requests it costs depends on the platform rather than the config: a native
+  HTTP client is never a browser session, so everything renders there; the web
+  build's companion extension fetches from inside the user's own session, so
+  nothing has to render for this reason alone.
+
+`webview: true` means both at once, which is what it has always meant: every
+operation needs a rendered DOM, and the host walls plain clients. Adding
+`webviewOps` narrows the first without touching the second — which is why a
+narrowed source keeps `webview: true` rather than dropping it.
+
+**Narrow it.** "This source needs a browser" is almost never true of the whole
+source. On MangaNato, measured 2026-08-26:
+
+| endpoint | selector | plain fetch | rendered |
+|---|---|---|---|
+| popular / latest | `.list-comic-item-wrap` | 24 | 24 |
+| search | `.story_item` | 20 | 20 |
+| details | title / description / cover | present | present |
+| **chapters** | `select.navi-change-chapter option` | **2** | **2754** |
+| pages | `.container-chapter-reader img` | 18 | 18 |
+
+One endpoint out of five, and *not* the one the reader uses. Rendering the
+rest cost a full browser page load per request for content already in hand.
+
+The cost is not theoretical, and it is worst exactly where it is least
+visible. On web the renderer is a background tab, and a background tab is a
+hostile place to run a page: its `setTimeout` chains are clamped to one per
+second (then to one per *minute* once it has been hidden five minutes),
+`requestAnimationFrame` never fires at all, and neither does
+`IntersectionObserver` — so a site that builds or reveals content on any of
+those yields less there than it does in front of you, or nothing.
+
+A narrowed source is still a `webview` source, and so is one that only sets
+`challengesPlainClients`: a build with no renderer refuses both up front
+rather than fetching something it knows will be wrong.
+
+**`webview` stays a boolean on the wire on purpose.** An engine older than
+`webviewOps` parses that key with a hard cast and, when it isn't a boolean,
+drops the entire extension — the source would vanish from every install that
+hadn't updated, silently. Keeping it `true` means those builds go on rendering
+everything, which is only the old behaviour: slow, never wrong. So a narrowed
+config is safe to publish immediately, with no ordering against app releases.
+
+Unknown operation names are ignored rather than rejected, for the same reason
+in the other direction: a config written against a newer engine still loads
+here, minus that one entry.
+
 ### Query sanitization
 
 ```json

@@ -16,6 +16,64 @@ declarative config shape (`docs/source-config.schema.json`, whose
 Additive to the public API and to config behaviour; nothing here is
 breaking, so this classifies as a MINOR release when cut.
 
+- **`webview` names operations, not just a source** (`SourceConfig.webviewOps`,
+  `SourceOp`, `SourceConfig.webviewFor`). `"webview": true` still means every
+  operation and parses exactly as before; a new sibling key,
+  `"webviewOps": ["chapters"]`, narrows it to the ones that actually need a
+  rendered DOM. `SourceConfig.webview` is now a getter — "does any operation
+  need a browser" — so capability gating is unchanged. Schema
+  `x-engineVersion` 0.3.0.
+
+  The narrowing is a *separate key* rather than a widened `webview`, and that
+  is a compatibility decision: an engine older than this parses `webview` with
+  a hard `as bool?` cast, and `loadInstalled` catches the resulting `TypeError`
+  by dropping the whole extension — a narrowed config would have made the
+  source silently vanish from every install that hadn't updated. Verified
+  against the previously pinned build: it reads the narrowed natomanga config,
+  sees `webview: true`, and renders everything, which is only the old
+  behaviour. So a narrowed config can ship without waiting on app releases.
+
+  The flag was all-or-nothing while the need almost never is: on MangaNato,
+  measured 2026-08-26, only the chapter list differs between a plain fetch and
+  a rendered page (2 `<option>` entries against 2754), while the *reader's*
+  page list is identical either way — so the hottest path in the app was
+  paying a full browser page load per chapter for markup it already had. That
+  is expensive natively and much worse on web, where the renderer is a
+  background tab: timers clamped to one per second, `requestAnimationFrame`
+  and `IntersectionObserver` never firing at all.
+
+  The share scope's key gains the transport, since two operations on one URL
+  can now legitimately want different bodies — a plain body must never satisfy
+  an operation that was narrowed to `webview` because a plain body is not
+  enough.
+- **A `parse: json` step is never rendered** (`StepFetch` gains a `document`
+  flag, which the pipeline runner sets from the step's own parse mode). A
+  browser navigation always produces a document — a JSON endpoint opened in a
+  tab comes back wrapped in `<html><body><pre>` — so routing a JSON step
+  through the browser hands the decoder markup every time. A type mismatch
+  rather than a tuning question, which is why the runner answers it and not the
+  config.
+
+  What it unlocks is bigger than the bug it prevents: a config can move an
+  endpoint onto its site's own JSON API without breaking the platforms where
+  `webview` is doing real work. MangaNato's chapter list turned out to be
+  exactly that — `GET /api/manga/{slug}/chapters?limit=2000`, which answers a
+  plain client with 200 while the site's HTML pages answer 403 — so its whole
+  chapter list is one request and needs no browser anywhere. Measured live
+  through the shipped config with a plain HTTP client: **1377 chapters in
+  1146 ms**, against two browser page loads before.
+- **`SourceConfig.challengesPlainClients`**, and the `clientIsBrowserSession`
+  argument to `htmlSource`/`ExtensionManager`. A bare `webview: true` meant
+  two things at once — "this content is script-built" and "this host refuses
+  anything that isn't a real browser" — and only the first is a property of
+  the *content*. The second depends on what the client is, so narrowing a
+  config without separating them would have moved a Cloudflare-hard source
+  onto a plain HTTP client: web fixed by breaking every native build.
+
+  `webview: true` implies it, so nothing existing changes. A host whose client
+  fetches from inside the user's own browser session sets
+  `clientIsBrowserSession` and pays for a render only where the content really
+  is script-built.
 - **`Source.requiresWebView`**: a capability marker on the value itself,
   populated from the config's `webview` flag. The fact that a source needs a
   real browser previously lived only inside the HTML engine, where it routes

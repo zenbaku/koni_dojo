@@ -102,6 +102,50 @@ sealed class AnySourceConfig {
 Pipeline? _stepsFromJson(Object? json) =>
     json == null ? null : Pipeline.fromJson(json as List<dynamic>);
 
+/// Reads `webviewOps` — the operations that need a rendered DOM.
+///
+/// Null (the key absent) means "whatever `webview` said", which the caller
+/// supplies. A list narrows it, and an empty list is a real answer: none of
+/// them do, though the host may still wall a plain client.
+///
+/// Unknown names are dropped rather than thrown on. The repo index is written
+/// by a newer build than the one reading it as often as the other way round,
+/// so a config naming an operation this engine hasn't got should lose that one
+/// entry, not fail to load.
+Set<SourceOp>? _webviewOpsFromJson(Object? json) => switch (json) {
+  final List<dynamic> names => {
+    for (final name in names)
+      if (SourceOp.byName('$name') case final op?) op,
+  },
+  _ => null,
+};
+
+/// The operations a source config describes, as [SourceConfig.webviewOps]
+/// names them.
+///
+/// Exists so `webview` can say *which* requests need a real browser rather
+/// than only *whether* any do. Named after the config's own blocks, so
+/// `"webview": ["chapters"]` reads as "the chapters block needs script".
+enum SourceOp {
+  popular,
+  latest,
+  search,
+  tag,
+  details,
+  chapters,
+  pages,
+
+  /// [FilterConfig.optionsFrom]'s discovery fetch.
+  filters;
+
+  static SourceOp? byName(String name) {
+    for (final op in values) {
+      if (op.name == name) return op;
+    }
+    return null;
+  }
+}
+
 /// Declarative description of an HTML-scraping source.
 class SourceConfig implements AnySourceConfig {
   SourceConfig({
@@ -110,7 +154,9 @@ class SourceConfig implements AnySourceConfig {
     required this.lang,
     required this.baseUrl,
     this.icon = '',
-    this.webview = false,
+    bool webview = false,
+    Set<SourceOp>? webviewOps,
+    bool? challengesPlainClients,
     this.warmImageByUrl = false,
     this.warmImageViaImgTag = false,
     this.loginUrl = '',
@@ -128,7 +174,12 @@ class SourceConfig implements AnySourceConfig {
     required this.chapters,
     required this.pages,
     this.filters = const [],
-  });
+  }) : webviewOps =
+           webviewOps ?? (webview ? SourceOp.values.toSet() : const {}),
+       // A bare `webview: true` never said *why*, and both reasons were true
+       // of the hosts it was set on. Narrowing has to keep the unstated half,
+       // so `true` still implies it unless the config says otherwise.
+       challengesPlainClients = challengesPlainClients ?? webview;
 
   factory SourceConfig.fromJson(Map<String, dynamic> json) => SourceConfig(
     id: json['id'] as String,
@@ -137,6 +188,8 @@ class SourceConfig implements AnySourceConfig {
     baseUrl: json['baseUrl'] as String,
     icon: json['icon'] as String? ?? '',
     webview: json['webview'] as bool? ?? false,
+    webviewOps: _webviewOpsFromJson(json['webviewOps']),
+    challengesPlainClients: json['challengesPlainClients'] as bool?,
     warmImageByUrl: json['warmImageByUrl'] as bool? ?? false,
     warmImageViaImgTag: json['warmImageViaImgTag'] as bool? ?? false,
     loginUrl: json['loginUrl'] as String? ?? '',
@@ -192,10 +245,51 @@ class SourceConfig implements AnySourceConfig {
   @override
   final String icon;
 
-  /// Route this source's page GETs through the app's WebView (real browser
-  /// fingerprint + Cloudflare clearance) instead of the HTTP client, for hosts
-  /// whose Cloudflare mode re-challenges cookie-replay from a non-browser client.
-  final bool webview;
+  /// Which of this source's GETs go through a real browser (WebView natively,
+  /// a background tab through the companion extension on web) instead of the
+  /// HTTP client — for hosts whose Cloudflare mode re-challenges cookie-replay
+  /// from a non-browser client, and for pages whose content only exists once
+  /// their script has run.
+  ///
+  /// **Per operation, because "this source needs a browser" is almost never
+  /// true of the whole source.** `webview: true` alone means every operation,
+  /// which is what it always meant; the `webviewOps` key narrows it. On
+  /// MangaNato, measured 2026-08-26, only the chapter list differs from what a
+  /// plain fetch returns (`<option>` entries: 2 in the response, 2754 in the
+  /// live DOM) — while the reader's own page list is *identical* in both.
+  /// Rendering it anyway put a browser page load on the reading path for
+  /// content that was already in hand, and a background tab is the slowest
+  /// possible place to put one: its timers are clamped to one per second and
+  /// `requestAnimationFrame` never fires at all.
+  ///
+  /// A narrowed source is still a `webview` source ([webview] stays true), so
+  /// capability gating — "this build has no renderer, refuse before the
+  /// request" — is unchanged.
+  final Set<SourceOp> webviewOps;
+
+  /// Whether this host refuses a client that isn't a real browser session,
+  /// regardless of what any single operation needs.
+  ///
+  /// The other half of what a bare `webview: true` used to mean, and the half
+  /// that cannot be answered by the config alone: it depends on what the
+  /// *client* is. A native HTTP client replaying a clearance cookie is not a
+  /// browser and gets re-challenged, so every operation has to be rendered
+  /// there. A client that fetches from inside the user's own browser session
+  /// — the web build's companion extension, with cookies granted — already
+  /// satisfies this, and only the operations that genuinely need a rendered
+  /// DOM ([webviewOps]) have to pay for one.
+  ///
+  /// Which is why narrowing a config is safe: this stays true, native keeps
+  /// rendering everything, and only the transport that has earned it skips.
+  final bool challengesPlainClients;
+
+  /// Whether *any* operation might need a browser. What the capability gates
+  /// ask, and deliberately the widest of the three questions — a build with no
+  /// renderer should refuse such a source up front on either ground.
+  bool get webview => webviewOps.isNotEmpty || challengesPlainClients;
+
+  /// Whether [op] specifically needs one.
+  bool webviewFor(SourceOp op) => webviewOps.contains(op);
 
   /// For a `webview` source: when warming a cover/page image's origin before
   /// fetching its bytes, navigate to the image's own URL instead of its bare
@@ -322,7 +416,25 @@ class SourceConfig implements AnySourceConfig {
     'baseUrl': baseUrl,
     if (js) 'js': js,
     if (icon.isNotEmpty) 'icon': icon,
+    /* `webview` stays a bool on the wire, and that is a compatibility
+     * decision rather than a stylistic one: an engine that predates
+     * [webviewOps] parses this key with a hard `as bool?` cast, so a list here
+     * throws — and `loadInstalled` catches that by *dropping the whole
+     * extension*. The source would simply disappear from every install that
+     * hadn't updated yet, silently. Those builds see `webview: true` instead
+     * and render every operation, which is only the old behaviour: slow, never
+     * wrong. The narrowing rides in a key they have never heard of and
+     * therefore ignore, so it can be published without waiting for anyone. */
     if (webview) 'webview': true,
+    // Omitted when it says nothing `webview` doesn't, so a config that never
+    // narrowed round-trips byte-identical.
+    if (webviewOps.length != SourceOp.values.length)
+      'webviewOps': [
+        for (final op in SourceOp.values)
+          if (webviewOps.contains(op)) op.name,
+      ],
+    if (challengesPlainClients != webview)
+      'challengesPlainClients': challengesPlainClients,
     if (warmImageByUrl) 'warmImageByUrl': true,
     if (warmImageViaImgTag) 'warmImageViaImgTag': true,
     if (loginUrl.isNotEmpty) 'loginUrl': loginUrl,

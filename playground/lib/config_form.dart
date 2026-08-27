@@ -354,16 +354,22 @@ class _ConfigFormState extends State<ConfigForm> {
   /// JSON at its default (false). Unlike `_opField`'s bool branch, which
   /// only runs for a key already present, this one has to work from absence.
   Widget _sourceSwitch(Map<String, dynamic> source, String key, String label) {
+    /* `webview` is a bool *or* a list of operation names. A list is on, and
+     * stays a list: reading it as `== true` would show a narrowed config as
+     * off, and writing `true` over it would widen it back to every request —
+     * silently undoing the narrowing just by opening the form. */
+    final value = source[key];
+    final narrowed = value is List && value.isNotEmpty;
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
       dense: true,
-      title: Text(label),
-      value: source[key] == true,
+      title: Text(narrowed ? '$label — ${value.join(', ')}' : label),
+      value: value == true || narrowed,
       onChanged: (v) {
-        if (v) {
-          source[key] = true;
-        } else {
+        if (!v) {
           source.remove(key);
+        } else if (!narrowed) {
+          source[key] = true;
         }
         _emit();
         setState(() {});

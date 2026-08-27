@@ -566,12 +566,21 @@ bool _hasNextPage(Pagination p, Map<String, String> meta) {
 
 /// Fetches one step's body. Impure (HTTP, runs on the main isolate); supplied
 /// by the engine so the pure runner stays isolate-agnostic.
+///
+/// [document] says whether this step's body is meant to be a *document*, and
+/// exists so the engine can decline to render one that isn't. A browser
+/// navigation always produces a document — a JSON endpoint opened in a tab
+/// comes back wrapped in `<html><body><pre>` — so a `parse: json` step routed
+/// through the browser hands the decoder markup, every time. That is a type
+/// mismatch rather than a tuning question, which is why the runner answers it
+/// rather than the config.
 typedef StepFetch =
     Future<String> Function(
       String url, {
       String method,
       String body,
       Map<String, String> headers,
+      bool document,
     });
 
 /// Walks [pipeline]'s steps, threading [vars] forward: each step fetches via
@@ -648,6 +657,8 @@ Future<T> _runPipeline<T>(
         method: req.method,
         body: req.body,
         headers: req.headers,
+        // A JSON body is the one shape a rendered page cannot be.
+        document: step.parse != StepParse.json,
       );
     }
     if (step.output != null) {
@@ -905,6 +916,8 @@ Future<String> runBodyPipeline(
         method: req.method,
         body: req.body,
         headers: req.headers,
+        // A JSON body is the one shape a rendered page cannot be.
+        document: step.parse != StepParse.json,
       );
     }
     final terminal = index == pipeline.steps.length - 1;
