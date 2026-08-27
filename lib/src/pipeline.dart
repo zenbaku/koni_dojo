@@ -445,6 +445,7 @@ class StepOutput {
     this.meta = const {},
     this.count = const Locator(),
     this.start = 1,
+    this.pad = 0,
     this.paginate,
   });
 
@@ -465,6 +466,7 @@ class StepOutput {
         ? const Locator()
         : Locator.fromJson(json['count'] as Map<String, dynamic>),
     start: json['start'] as int? ?? 1,
+    pad: json['pad'] as int? ?? 0,
     paginate: json['paginate'] == null
         ? null
         : Pagination.fromJson(json['paginate'] as Map<String, dynamic>),
@@ -486,6 +488,17 @@ class StepOutput {
   final Locator count;
   final int start;
 
+  /// Zero-pad `{n}` to this width in the **generate** template; 0 leaves it
+  /// bare, which is what every existing config wants.
+  ///
+  /// Not cosmetic. A reader whose page list exists only as a count plus a URL
+  /// shape can be scraped without a browser at all — but only if the shape is
+  /// reproduced exactly, and a host that writes `p0001.jpg` will not answer
+  /// `p1.jpg`. Without this such a source has to be rendered, and one that
+  /// also lazy-loads its images then yields whatever happened to be near the
+  /// viewport rather than the chapter.
+  final int pad;
+
   /// For a **record** output (chapters/listings) whose source paginates
   /// server-side with no single "give me everything" request: re-runs this
   /// step, incrementing a page var, merging each page's records, until
@@ -501,6 +514,7 @@ class StepOutput {
     if (meta.isNotEmpty) 'meta': meta.map((k, v) => MapEntry(k, v.toJson())),
     if (count.toJson().isNotEmpty) 'count': count.toJson(),
     if (start != 1) 'start': start,
+    if (pad != 0) 'pad': pad,
     if (paginate != null) 'paginate': paginate!.toJson(),
   };
 }
@@ -1161,7 +1175,14 @@ List<String> _generatePages(
   int count,
 ) => [
   for (var n = out.start; n < out.start + count; n++)
-    _subst(out.value.template, {...vars, 'n': '$n'}),
+    _subst(out.value.template, {
+      ...vars,
+      // Zero-padded when the host numbers its files that way (`p0001.jpg`).
+      // Renderer-free extraction depends on it: a site whose page list is only
+      // reachable as a count plus a URL shape cannot be scraped at all if the
+      // shape can't be reproduced exactly.
+      'n': out.pad > 0 ? '$n'.padLeft(out.pad, '0') : '$n',
+    }),
 ];
 
 /// Reads a list of records (one `{field: value}` map per matched element) out

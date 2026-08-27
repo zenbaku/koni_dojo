@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zenbaku.github.io/koni_dojo/source-config.schema.json",
-  "x-engineVersion": "0.3.0",
+  "x-engineVersion": "0.3.1",
   "title": "Dojo extension file",
   "description": "An extensions/*.json file: one extension's metadata plus its source(s). Mirrors lib/src/extension_models.dart (the authoritative model) and docs/extensions.md (the prose walkthrough). x-engineVersion is the koni_dojo package version (see pubspec.yaml) this schema was last verified against — bump both together whenever the schema's shape changes; test/schema_sync_test.dart checks this file's properties against every config class's actual toJson() field set, so a Dart-side field with no matching schema entry (or vice versa) fails the test suite instead of silently shipping.",
   "type": "object",
@@ -656,6 +656,11 @@
         },
         "count": { "$ref": "#/$defs/locator" },
         "start": { "type": "integer", "default": 1 },
+        "pad": {
+          "type": "integer",
+          "default": 0,
+          "description": "Generate shape only: zero-pad {n} to this width, for a host that names its files p0001.jpg and will not answer p1.jpg. 0 (the default) leaves the number bare. Worth reaching for because a reader whose page list exists only as a count plus a URL shape can then be read with no browser at all — and rendering such a reader is often worse than useless when it also lazy-loads, since the DOM holds only the pages near the viewport."
+        },
         "paginate": { "$ref": "#/$defs/pagination" }
       }
     },

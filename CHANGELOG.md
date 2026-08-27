@@ -46,6 +46,16 @@ breaking, so this classifies as a MINOR release when cut.
   can now legitimately want different bodies — a plain body must never satisfy
   an operation that was narrowed to `webview` because a plain body is not
   enough.
+- **`pad` on the generate shape**: zero-pads `{n}` to a fixed width, for a host
+  that names its files `p0001.jpg` and will not answer `p1.jpg`.
+
+  Small, and it decides whether a source is readable at all. One real source's
+  reader keeps every page path in the response (91 of them) while rendering
+  only the six near the viewport — so rendering it would have produced a
+  six-page chapter out of ninety-one, silently. Reading the count and
+  regenerating the URL shape gets the whole chapter with no browser, but only
+  if the shape is reproduced exactly.
+
 - **A `parse: json` step is never rendered** (`StepFetch` gains a `document`
   flag, which the pipeline runner sets from the step's own parse mode). A
   browser navigation always produces a document — a JSON endpoint opened in a

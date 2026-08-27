@@ -674,6 +674,88 @@ void main() {
       ]);
     });
 
+    test('`pad` zero-pads {n} to the width the host writes', () async {
+      /* A host that names its files `p0001.jpg` will not answer `p1.jpg`, and
+       * a reader whose page list exists *only* as a count plus a URL shape is
+       * then unscrapable without a browser — which for a lazy-loading reader
+       * means getting whatever was near the viewport rather than the chapter.
+       * Found on a real source whose raw response carries all 91 page paths
+       * while its rendered DOM holds six. */
+      final pipeline = Pipeline([
+        Step(
+          request: const StepRequest(base: 'chapterUrl'),
+          output: StepOutput(
+            count: const Locator(regex: r'"pageCount":(\d+)'),
+            value: const Locator(template: '{baseUrl}/c/p{n}.jpg'),
+            pad: 4,
+          ),
+        ),
+      ]);
+      final pages = await runFlatListPipeline(
+        pipeline,
+        const {
+          'baseUrl': 'https://s.example',
+          'chapterUrl': 'https://s.example/ch/x',
+        },
+        baseUrl: 'https://s.example',
+        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
+            '<script>{"pageCount":3}</script>',
+      );
+      expect(pages, [
+        'https://s.example/c/p0001.jpg',
+        'https://s.example/c/p0002.jpg',
+        'https://s.example/c/p0003.jpg',
+      ]);
+    });
+
+    test('a number wider than `pad` is left alone, not truncated', () async {
+      final pipeline = Pipeline([
+        Step(
+          request: const StepRequest(base: 'chapterUrl'),
+          output: StepOutput(
+            count: const Locator(regex: r'"pageCount":(\d+)'),
+            value: const Locator(template: '{baseUrl}/p{n}.jpg'),
+            start: 999,
+            pad: 2,
+          ),
+        ),
+      ]);
+      final pages = await runFlatListPipeline(
+        pipeline,
+        const {
+          'baseUrl': 'https://s.example',
+          'chapterUrl': 'https://s.example/ch/x',
+        },
+        baseUrl: 'https://s.example',
+        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
+            '<script>{"pageCount":2}</script>',
+      );
+      expect(pages, ['https://s.example/p999.jpg', 'https://s.example/p1000.jpg']);
+    });
+
+    test('no `pad` leaves every existing config untouched', () async {
+      final pipeline = Pipeline([
+        Step(
+          request: const StepRequest(base: 'chapterUrl'),
+          output: StepOutput(
+            count: const Locator(regex: r'"pageCount":(\d+)'),
+            value: const Locator(template: '{baseUrl}/p{n}.jpg'),
+          ),
+        ),
+      ]);
+      final pages = await runFlatListPipeline(
+        pipeline,
+        const {
+          'baseUrl': 'https://s.example',
+          'chapterUrl': 'https://s.example/ch/x',
+        },
+        baseUrl: 'https://s.example',
+        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
+            '<script>{"pageCount":2}</script>',
+      );
+      expect(pages, ['https://s.example/p1.jpg', 'https://s.example/p2.jpg']);
+    });
+
     test('json count + 0-based start', () async {
       final pipeline = Pipeline([
         Step(
