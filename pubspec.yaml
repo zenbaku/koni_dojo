@@ -26,3 +26,7 @@ dependencies:
 dev_dependencies:
   test: ^1.25.0
   lints: ^5.0.0
+  # Build tooling only (tool/schema_lint.dart), never the published package:
+  # validating extensions/*.json against docs/source-config.schema.json is
+  # what stops a config and the schema an author edits against from drifting.
+  json_schema: ^5.2.2

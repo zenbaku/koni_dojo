@@ -10,7 +10,11 @@
 // Each `extensions/*.json` is one index entry
 // `{name, pkg, version, lang, nsfw, sources:[...]}`. Every source is parsed
 // through the real engine (`ExtensionInfo.fromJson` → `AnySourceConfig.fromJson`,
-// plus a lossless round-trip) and every selector string is checked with
+// plus a lossless round-trip), validated against `docs/source-config.schema.json`
+// (which the models can't do for themselves: an unknown key isn't an error to
+// a `fromJson`, it is simply never read — so a misspelled selector key would
+// otherwise build, ship, and quietly match nothing), and every selector string
+// is checked with
 // `selector_lint.dart` against the engine's actual CSS support surface, so a
 // typo, an unsupported pseudo-class, or an unrepresentable selector fails the
 // build instead of shipping and only surfacing live. Entries are de-duped by
@@ -29,6 +33,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:koni_dojo/koni_dojo.dart';
 
+import 'schema_lint.dart';
 import 'selector_lint.dart';
 import 'workspace.dart';
 
@@ -93,6 +98,10 @@ void main(List<String> args) {
           .toList()
         ..sort((a, b) => a.path.compareTo(b.path));
 
+  // Compiled once: it walks the whole schema document, and this loop runs a
+  // few hundred times.
+  final schema = ExtensionSchema.load('docs/source-config.schema.json');
+
   final entries = <Map<String, dynamic>>[];
   final byPkg = <String, String>{}; // pkg -> filename, for duplicate detection
   var errors = 0;
@@ -104,6 +113,20 @@ void main(List<String> args) {
       entry = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
     } catch (e) {
       print('✗ $fileName: not a JSON object ($e)');
+      errors++;
+      continue;
+    }
+    /* Schema gate, before the engine parses anything: the models silently
+     * ignore a key they don't know, so a misspelled selector key is a config
+     * that builds, ships, and returns nothing on a real site. The schema
+     * declares `additionalProperties: false` everywhere, which is what makes
+     * that an error instead of a shrug. Run against the file as authored, so
+     * the message points at what is actually written there. */
+    final schemaIssues = lintExtensionSchema(entry, fileName, schema);
+    if (schemaIssues.isNotEmpty) {
+      for (final issue in schemaIssues) {
+        print('✗ $fileName: $issue');
+      }
       errors++;
       continue;
     }

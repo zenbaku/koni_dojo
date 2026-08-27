@@ -84,6 +84,19 @@ breaking, so this classifies as a MINOR release when cut.
   chapter list is one request and needs no browser anywhere. Measured live
   through the shipped config with a plain HTTP client: **1377 chapters in
   1146 ms**, against two browser page loads before.
+- **The repo build validates every config against the schema**
+  (`tool/schema_lint.dart`, wired into `tool/build_repo.dart`). Tooling only —
+  no engine or config change — but it closes the half the models cannot see:
+  a `fromJson` never errors on a key it doesn't know, it simply never reads it,
+  so a misspelled selector key parses, round-trips, ships, and matches nothing
+  on a real page. `docs/source-config.schema.json` forbids unknown properties
+  at every level, which is what turns that into a failed build.
+
+  Caught one config on its first run: a listing block belonging to the other
+  dialect, read by nobody. A `oneOf` that fails reports only that no branch
+  matched, so a failing source is re-validated against the dialect it declares
+  and the real complaint is what gets printed.
+
 - **`SourceConfig.imageRateLimit`**, and images no longer queue behind
   `rateLimit`. A config's rate limit is a promise to the *site*: listings,
   search, details, chapter lists and page lists still space themselves behind
