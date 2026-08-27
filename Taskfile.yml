@@ -46,9 +46,18 @@ tasks:
     cmds:
       - dart test
 
-  check:
-    desc: 'The pre-commit/CI gate: analyze + test.'
+  format-check:
+    desc: 'Fail if anything is not what `dart format` produces.'
     cmds:
+      # Repo-wide from the root, so playground/ and webview/ are covered by
+      # the one gate. Checked rather than applied: a gate that rewrites files
+      # turns "your commit is unformatted" into "your commit grew".
+      - dart format --output=none --set-exit-if-changed .
+
+  check:
+    desc: 'The pre-commit/CI gate: format + analyze + test.'
+    cmds:
+      - task: format-check
       - task: analyze
       - task: test
 

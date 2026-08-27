@@ -1,4 +1,4 @@
-# The engine's own CI gate — mirrors `task check` (analyze + test), which
+# The engine's own CI gate — mirrors `task check` (format + analyze + test), which
 # needs only the Dart SDK (no Flutter, no app checkout, no workspace). Runs
 # on every push/PR so a break is caught automatically instead of only when
 # someone remembers to run `task check` locally.
@@ -17,6 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
       - run: dart pub get
+      # Repo-wide, so the Flutter sub-packages are gated here too rather than
+      # each needing its own step: `dart format` needs no Flutter SDK, and
+      # unformatted files are how an unrelated edit turns into a few hundred
+      # lines of reflow nobody meant to review.
+      - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze
       - run: dart test
 
