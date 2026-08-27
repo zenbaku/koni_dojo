@@ -91,20 +91,28 @@ void main() {
     int status,
     Uint8List body, {
     Map<String, String> headers = const {},
-  }) => MockClient((_) async => http.Response.bytes(body, status, headers: headers));
+  }) => MockClient(
+    (_) async => http.Response.bytes(body, status, headers: headers),
+  );
 
   group('the happy path', () {
-    test('a 200 carrying an image is the answer, and no browser is woken',
-        () async {
-      final fetcher = _RecordingFetcher(() => _png);
-      final bytes = await fetchSourceImage(
-        url,
-        client: clientReturning(200, _png),
-        webViewFetcher: fetcher,
-      );
-      expect(bytes, _png);
-      expect(fetcher.calls, 0, reason: 'a working fetch must not open a browser');
-    });
+    test(
+      'a 200 carrying an image is the answer, and no browser is woken',
+      () async {
+        final fetcher = _RecordingFetcher(() => _png);
+        final bytes = await fetchSourceImage(
+          url,
+          client: clientReturning(200, _png),
+          webViewFetcher: fetcher,
+        );
+        expect(bytes, _png);
+        expect(
+          fetcher.calls,
+          0,
+          reason: 'a working fetch must not open a browser',
+        );
+      },
+    );
 
     test('the throttle runs before the request', () async {
       var throttled = false;
@@ -131,7 +139,11 @@ void main() {
         client: clientReturning(200, _wall),
         webViewFetcher: fetcher,
       );
-      expect(fetcher.calls, 1, reason: 'the 200-with-markup wall went undetected');
+      expect(
+        fetcher.calls,
+        1,
+        reason: 'the 200-with-markup wall went undetected',
+      );
       expect(bytes, _png);
     });
 
@@ -139,7 +151,11 @@ void main() {
       final fetcher = _RecordingFetcher(() => _png);
       final bytes = await fetchSourceImage(
         url,
-        client: clientReturning(403, _wall, headers: {'cf-mitigated': 'challenge'}),
+        client: clientReturning(
+          403,
+          _wall,
+          headers: {'cf-mitigated': 'challenge'},
+        ),
         webViewFetcher: fetcher,
       );
       expect(fetcher.calls, 1);
@@ -156,17 +172,22 @@ void main() {
         ),
         throwsA(isA<http.ClientException>()),
       );
-      expect(fetcher.calls, 0,
-          reason: 'a 404 is not a challenge; driving a browser is pure cost');
-    });
-
-    test('walled with no browser available throws the challenge exception',
-        () async {
-      await expectLater(
-        fetchSourceImage(url, client: clientReturning(200, _wall)),
-        throwsA(isA<CloudflareChallengeException>()),
+      expect(
+        fetcher.calls,
+        0,
+        reason: 'a 404 is not a challenge; driving a browser is pure cost',
       );
     });
+
+    test(
+      'walled with no browser available throws the challenge exception',
+      () async {
+        await expectLater(
+          fetchSourceImage(url, client: clientReturning(200, _wall)),
+          throwsA(isA<CloudflareChallengeException>()),
+        );
+      },
+    );
   });
 
   test('an empty 200 is a broken response, not a challenge', () async {
@@ -257,7 +278,10 @@ void main() {
     // The widening: these say "my images need a browser" even where the
     // webview marker is absent, which an imperative source has no way to set.
     test('a warm-strategy flag alone is enough', () {
-      expect(sourceFrom({'warmImageByUrl': true}).requiresLiveTransport, isTrue);
+      expect(
+        sourceFrom({'warmImageByUrl': true}).requiresLiveTransport,
+        isTrue,
+      );
       expect(
         sourceFrom({'warmImageViaImgTag': true}).requiresLiveTransport,
         isTrue,
@@ -279,7 +303,8 @@ void main() {
       client: MockClient((request) async {
         // Stands in for the real CDN, which answers 403 to anything without a
         // Referer and 200 with it.
-        final referer = request.headers['Referer'] ?? request.headers['referer'];
+        final referer =
+            request.headers['Referer'] ?? request.headers['referer'];
         return referer == null
             ? http.Response('denied', 403)
             : http.Response.bytes(_png, 200);
@@ -290,10 +315,9 @@ void main() {
     // null, so a `headers ?? source` fallback kept the empty map and threw the
     // source's Referer away. Every page 403'd.
     test('an empty map does not erase them', () async {
-      final bytes = await sourceWith(const {}).imageBytes(
-        url,
-        headers: const {},
-      );
+      final bytes = await sourceWith(
+        const {},
+      ).imageBytes(url, headers: const {});
       expect(bytes, _png);
     });
 
@@ -331,7 +355,11 @@ void main() {
     Map<String, String>? seenHeaders;
     await fetchSourceImage(
       url,
-      client: clientReturning(200, _png, headers: {'content-type': 'image/png'}),
+      client: clientReturning(
+        200,
+        _png,
+        headers: {'content-type': 'image/png'},
+      ),
       onResponse: (status, headers) {
         seenStatus = status;
         seenHeaders = headers;
@@ -341,37 +369,47 @@ void main() {
     expect(seenHeaders?['content-type'], 'image/png');
   });
 
-  test('a failing response is reported too, not only a successful one',
-      () async {
-    int? seenStatus;
-    await expectLater(
-      fetchSourceImage(
-        url,
-        client: clientReturning(429, Uint8List(0), headers: {'retry-after': '30'}),
-        onResponse: (status, _) => seenStatus = status,
-      ),
-      throwsA(isA<SourceImageException>()),
-    );
-    expect(seenStatus, 429, reason: 'a rate limit must reach the log');
-  });
+  test(
+    'a failing response is reported too, not only a successful one',
+    () async {
+      int? seenStatus;
+      await expectLater(
+        fetchSourceImage(
+          url,
+          client: clientReturning(
+            429,
+            Uint8List(0),
+            headers: {'retry-after': '30'},
+          ),
+          onResponse: (status, _) => seenStatus = status,
+        ),
+        throwsA(isA<SourceImageException>()),
+      );
+      expect(seenStatus, 429, reason: 'a rate limit must reach the log');
+    },
+  );
 
-  test('a browser fallback is announced, so it does not read as a hang',
-      () async {
-    final notices = <SourceImageNotice>[];
-    await fetchSourceImage(
-      url,
-      client: clientReturning(200, _wall),
-      webViewFetcher: _RecordingFetcher(() => _png),
-      onNotice: notices.add,
-    );
-    expect(notices, [SourceImageNotice.clearingChallenge]);
-  });
+  test(
+    'a browser fallback is announced, so it does not read as a hang',
+    () async {
+      final notices = <SourceImageNotice>[];
+      await fetchSourceImage(
+        url,
+        client: clientReturning(200, _wall),
+        webViewFetcher: _RecordingFetcher(() => _png),
+        onNotice: notices.add,
+      );
+      expect(notices, [SourceImageNotice.clearingChallenge]);
+    },
+  );
 
   test('a transport failure still gets the browser its turn', () async {
     final fetcher = _RecordingFetcher(() => _png);
     final bytes = await fetchSourceImage(
       url,
-      client: MockClient((_) async => throw http.ClientException('refused', url)),
+      client: MockClient(
+        (_) async => throw http.ClientException('refused', url),
+      ),
       webViewFetcher: fetcher,
     );
     expect(fetcher.calls, 1);
@@ -414,45 +452,57 @@ void main() {
       );
     });
 
-    test('one arriving during the throttle throws before the request',
-        () async {
-      final counted = countingClient();
-      final abort = Completer<void>();
-      final fetch = fetchSourceImage(
-        url,
-        client: counted.client,
-        // A limiter that never lets go, so only the abort can end this wait.
-        throttle: () => Completer<void>().future,
-        abort: abort.future,
-      );
-      await settle();
-      abort.complete();
-      await expectLater(fetch, throwsA(isA<SourceImageAborted>()));
-      expect(counted.calls(), 0);
-    });
+    test(
+      'one arriving during the throttle throws before the request',
+      () async {
+        final counted = countingClient();
+        final abort = Completer<void>();
+        final fetch = fetchSourceImage(
+          url,
+          client: counted.client,
+          // A limiter that never lets go, so only the abort can end this wait.
+          throttle: () => Completer<void>().future,
+          abort: abort.future,
+        );
+        await settle();
+        abort.complete();
+        await expectLater(fetch, throwsA(isA<SourceImageAborted>()));
+        expect(counted.calls(), 0);
+      },
+    );
 
     // The assertion this whole seam exists for. A `Future.any` that merely
     // stopped *waiting* would pass every other test in this group while the
     // page went on downloading to nobody.
-    test('one arriving mid-body cancels the subscription, not just the wait',
-        () async {
-      final client = _HandFedClient();
-      final abort = Completer<void>();
-      final fetch = fetchSourceImage(url, client: client, abort: abort.future);
-      client.body.add(_png.sublist(0, 8));
-      await settle();
-      expect(client.sends, 1, reason: 'the request should be in flight by now');
-      expect(client.cancelled, isFalse);
+    test(
+      'one arriving mid-body cancels the subscription, not just the wait',
+      () async {
+        final client = _HandFedClient();
+        final abort = Completer<void>();
+        final fetch = fetchSourceImage(
+          url,
+          client: client,
+          abort: abort.future,
+        );
+        client.body.add(_png.sublist(0, 8));
+        await settle();
+        expect(
+          client.sends,
+          1,
+          reason: 'the request should be in flight by now',
+        );
+        expect(client.cancelled, isFalse);
 
-      abort.complete();
-      await expectLater(fetch, throwsA(isA<SourceImageAborted>()));
-      await settle();
-      expect(
-        client.cancelled,
-        isTrue,
-        reason: 'the body kept downloading for a caller that had gone',
-      );
-    });
+        abort.complete();
+        await expectLater(fetch, throwsA(isA<SourceImageAborted>()));
+        await settle();
+        expect(
+          client.cancelled,
+          isTrue,
+          reason: 'the body kept downloading for a caller that had gone',
+        );
+      },
+    );
 
     test('one arriving before the browser fallback never starts it', () async {
       final fetcher = _RecordingFetcher(() => _png);
@@ -553,23 +603,28 @@ void main() {
     });
   });
 
-  test('imageRequest exposes the source\'s own headers for a native transport',
-      () async {
-    final source = htmlSource(
-      SourceConfig.fromJson({
-        'id': 'fixture',
-        'name': 'Fixture',
-        'baseUrl': 'https://example.test',
-        'headers': {'referer': 'https://example.test/'},
-        'popular': {'path': '/p', 'itemSelector': 'a'},
-        'chapters': {'itemSelector': 'a'},
-        'pages': {'imageSelector': 'img'},
-      }),
-      client: clientReturning(200, _png),
-    );
-    final request = source.imageRequest(url);
-    expect(request.url, url);
-    expect(request.headers, isNotEmpty,
-        reason: 'a native downloader would send a bare request without these');
-  });
+  test(
+    'imageRequest exposes the source\'s own headers for a native transport',
+    () async {
+      final source = htmlSource(
+        SourceConfig.fromJson({
+          'id': 'fixture',
+          'name': 'Fixture',
+          'baseUrl': 'https://example.test',
+          'headers': {'referer': 'https://example.test/'},
+          'popular': {'path': '/p', 'itemSelector': 'a'},
+          'chapters': {'itemSelector': 'a'},
+          'pages': {'imageSelector': 'img'},
+        }),
+        client: clientReturning(200, _png),
+      );
+      final request = source.imageRequest(url);
+      expect(request.url, url);
+      expect(
+        request.headers,
+        isNotEmpty,
+        reason: 'a native downloader would send a bare request without these',
+      );
+    },
+  );
 }

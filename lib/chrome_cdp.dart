@@ -252,7 +252,8 @@ class ChromeCdpFetcher implements WebViewFetcher {
         );
         if (res.statusCode == 200) {
           browserWs =
-              (jsonDecode(res.body) as Map<String, dynamic>)['webSocketDebuggerUrl']
+              (jsonDecode(res.body)
+                      as Map<String, dynamic>)['webSocketDebuggerUrl']
                   as String?;
           if (browserWs != null) break;
         }
@@ -294,7 +295,6 @@ class ChromeCdpFetcher implements WebViewFetcher {
   void _listen() {
     _sub = _socket.listen(_onMessage, onDone: _failAllPending);
   }
-
 
   void _onMessage(dynamic raw) {
     final msg = jsonDecode(raw as String) as Map<String, dynamic>;

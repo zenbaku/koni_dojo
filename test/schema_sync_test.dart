@@ -21,7 +21,11 @@ Set<String> _defProperties(Map<String, dynamic> schema, String defName) {
 /// mismatch here means either a Dart field shipped with no matching schema
 /// entry (add one to docs/source-config.schema.json) or a schema entry with
 /// no matching field left behind after a rename/removal (delete it there).
-void _expectKeysDeclared(Set<String> actual, Set<String> declared, String label) {
+void _expectKeysDeclared(
+  Set<String> actual,
+  Set<String> declared,
+  String label,
+) {
   final missing = actual.difference(declared);
   expect(
     missing,
@@ -52,125 +56,113 @@ void _expectKeysDeclared(Set<String> actual, Set<String> declared, String label)
 void main() {
   final schema = _schema();
 
-  test(
-    'SourceConfig.toJson() keys are all declared in the schema\'s '
-    'sourceConfig properties',
-    () {
-      final config = SourceConfig(
-        id: 'x',
-        name: 'X',
-        lang: 'en',
-        baseUrl: 'https://x.example',
-        icon: 'data:image/png;base64,',
-        webview: true,
-        // Narrowed, and disagreeing with `webview`, because `toJson` omits
-        // both when they say nothing new — a fixture at the defaults would
-        // exercise neither.
-        webviewOps: {SourceOp.chapters},
-        challengesPlainClients: false,
-        warmImageByUrl: true,
-        warmImageViaImgTag: true,
-        loginUrl: 'https://x.example/login',
-        localStorageSeed: {'a': true},
-        localStoragePreferences: [
-          LocalStoragePreferenceConfig(
-            id: 'p',
-            label: 'P',
-            seedKey: 'a',
-            path: ['b'],
-          ),
-        ],
-        js: true,
-        headers: {'Referer': 'https://x.example/'},
-        rateLimit: RateLimitConfig(requests: 1, perMs: 1000),
-        imageRateLimit: RateLimitConfig(requests: 3, perMs: 1000),
-        popular: ListingConfig(itemSelector: '.item'),
-        latest: ListingConfig(itemSelector: '.item'),
-        search: ListingConfig(itemSelector: '.item'),
-        tag: ListingConfig(itemSelector: '.item'),
-        details: DetailsConfig(titleSelector: 'h1'),
-        chapters: ChaptersConfig(itemSelector: '.chapter'),
-        pages: PagesConfig(imageSelector: 'img'),
-        filters: [FilterConfig(id: 'f', name: 'F', param: 'f')],
-      );
-      _expectKeysDeclared(
-        config.toJson().keys.toSet(),
-        _defProperties(schema, 'sourceConfig'),
-        'SourceConfig.toJson()',
-      );
-    },
-  );
+  test('SourceConfig.toJson() keys are all declared in the schema\'s '
+      'sourceConfig properties', () {
+    final config = SourceConfig(
+      id: 'x',
+      name: 'X',
+      lang: 'en',
+      baseUrl: 'https://x.example',
+      icon: 'data:image/png;base64,',
+      webview: true,
+      // Narrowed, and disagreeing with `webview`, because `toJson` omits
+      // both when they say nothing new — a fixture at the defaults would
+      // exercise neither.
+      webviewOps: {SourceOp.chapters},
+      challengesPlainClients: false,
+      warmImageByUrl: true,
+      warmImageViaImgTag: true,
+      loginUrl: 'https://x.example/login',
+      localStorageSeed: {'a': true},
+      localStoragePreferences: [
+        LocalStoragePreferenceConfig(
+          id: 'p',
+          label: 'P',
+          seedKey: 'a',
+          path: ['b'],
+        ),
+      ],
+      js: true,
+      headers: {'Referer': 'https://x.example/'},
+      rateLimit: RateLimitConfig(requests: 1, perMs: 1000),
+      imageRateLimit: RateLimitConfig(requests: 3, perMs: 1000),
+      popular: ListingConfig(itemSelector: '.item'),
+      latest: ListingConfig(itemSelector: '.item'),
+      search: ListingConfig(itemSelector: '.item'),
+      tag: ListingConfig(itemSelector: '.item'),
+      details: DetailsConfig(titleSelector: 'h1'),
+      chapters: ChaptersConfig(itemSelector: '.chapter'),
+      pages: PagesConfig(imageSelector: 'img'),
+      filters: [FilterConfig(id: 'f', name: 'F', param: 'f')],
+    );
+    _expectKeysDeclared(
+      config.toJson().keys.toSet(),
+      _defProperties(schema, 'sourceConfig'),
+      'SourceConfig.toJson()',
+    );
+  });
 
-  test(
-    'ApiSourceConfig.toJson() keys are all declared in the schema\'s '
-    'apiSourceConfig properties',
-    () {
-      const config = ApiSourceConfig(
-        id: 'x',
-        name: 'X',
-        lang: 'en',
-        baseUrl: 'https://x.example',
-        apiUrl: 'https://api.x.example',
-        icon: 'data:image/png;base64,',
-        headers: {'Referer': 'https://x.example/'},
-        imageHeaders: {'Referer': 'https://x.example/'},
-        rateLimit: RateLimitConfig(requests: 1, perMs: 1000),
-        imageRateLimit: RateLimitConfig(requests: 3, perMs: 1000),
-        popular: ApiListingConfig(path: '/popular'),
-        search: ApiListingConfig(path: '/search'),
-        tag: ApiListingConfig(path: '/tag'),
-        details: ApiDetailsConfig(),
-        chapters: ApiChaptersConfig(path: '/chapters'),
-        pages: ApiPagesConfig(path: '/pages'),
-        filters: [FilterConfig(id: 'f', name: 'F', param: 'f')],
-      );
-      _expectKeysDeclared(
-        config.toJson().keys.toSet(),
-        _defProperties(schema, 'apiSourceConfig'),
-        'ApiSourceConfig.toJson()',
-      );
-    },
-  );
+  test('ApiSourceConfig.toJson() keys are all declared in the schema\'s '
+      'apiSourceConfig properties', () {
+    const config = ApiSourceConfig(
+      id: 'x',
+      name: 'X',
+      lang: 'en',
+      baseUrl: 'https://x.example',
+      apiUrl: 'https://api.x.example',
+      icon: 'data:image/png;base64,',
+      headers: {'Referer': 'https://x.example/'},
+      imageHeaders: {'Referer': 'https://x.example/'},
+      rateLimit: RateLimitConfig(requests: 1, perMs: 1000),
+      imageRateLimit: RateLimitConfig(requests: 3, perMs: 1000),
+      popular: ApiListingConfig(path: '/popular'),
+      search: ApiListingConfig(path: '/search'),
+      tag: ApiListingConfig(path: '/tag'),
+      details: ApiDetailsConfig(),
+      chapters: ApiChaptersConfig(path: '/chapters'),
+      pages: ApiPagesConfig(path: '/pages'),
+      filters: [FilterConfig(id: 'f', name: 'F', param: 'f')],
+    );
+    _expectKeysDeclared(
+      config.toJson().keys.toSet(),
+      _defProperties(schema, 'apiSourceConfig'),
+      'ApiSourceConfig.toJson()',
+    );
+  });
 
-  test(
-    'ExtensionInfo.toJson() keys are all declared in the schema\'s '
-    'top-level properties',
-    () {
-      final info = ExtensionInfo(
-        name: 'X',
-        pkg: 'app.example.x',
-        version: 'abc123',
-        lang: 'en',
-        nsfw: true,
-        sources: const [],
-        updatedAt: '2026-01-01',
-      );
-      _expectKeysDeclared(
-        info.toJson().keys.toSet(),
-        (schema['properties'] as Map<String, dynamic>).keys.toSet(),
-        'ExtensionInfo.toJson()',
-      );
-    },
-  );
+  test('ExtensionInfo.toJson() keys are all declared in the schema\'s '
+      'top-level properties', () {
+    final info = ExtensionInfo(
+      name: 'X',
+      pkg: 'app.example.x',
+      version: 'abc123',
+      lang: 'en',
+      nsfw: true,
+      sources: const [],
+      updatedAt: '2026-01-01',
+    );
+    _expectKeysDeclared(
+      info.toJson().keys.toSet(),
+      (schema['properties'] as Map<String, dynamic>).keys.toSet(),
+      'ExtensionInfo.toJson()',
+    );
+  });
 
-  test(
-    'FilterConfig.toJson() keys are all declared in the schema\'s filter '
-    'properties',
-    () {
-      const filter = FilterConfig(
-        id: 'f',
-        name: 'F',
-        param: 'f',
-        excludeParam: 'f_exclude',
-        join: ',',
-        options: [FilterOptionConfig(value: 'v', label: 'V')],
-        optionsFrom: OptionsFromConfig(path: '/opts'),
-      );
-      _expectKeysDeclared(
-        filter.toJson().keys.toSet(),
-        _defProperties(schema, 'filter'),
-        'FilterConfig.toJson()',
-      );
-    },
-  );
+  test('FilterConfig.toJson() keys are all declared in the schema\'s filter '
+      'properties', () {
+    const filter = FilterConfig(
+      id: 'f',
+      name: 'F',
+      param: 'f',
+      excludeParam: 'f_exclude',
+      join: ',',
+      options: [FilterOptionConfig(value: 'v', label: 'V')],
+      optionsFrom: OptionsFromConfig(path: '/opts'),
+    );
+    _expectKeysDeclared(
+      filter.toJson().keys.toSet(),
+      _defProperties(schema, 'filter'),
+      'FilterConfig.toJson()',
+    );
+  });
 }

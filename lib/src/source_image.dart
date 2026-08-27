@@ -47,7 +47,8 @@ class SourceImageException implements http.ClientException {
       statusCode != null && (statusCode! >= 500 || statusCode == 429);
 
   @override
-  String toString() => 'SourceImageException: $message${uri == null ? '' : ', uri=$uri'}';
+  String toString() =>
+      'SourceImageException: $message${uri == null ? '' : ', uri=$uri'}';
 }
 
 /// The caller stopped wanting these bytes — a chapter left, a screen closed.
@@ -316,7 +317,10 @@ Future<Uint8List> fetchSourceImage(
 /// download nobody is waiting for is still a download.
 Future<T> _untilAborted<T>(Future<T> work, Future<void>? signal, Uri url) {
   if (signal == null) return work;
-  return Future.any([signal.then<T>((_) => throw SourceImageAborted(url)), work]);
+  return Future.any([
+    signal.then<T>((_) => throw SourceImageAborted(url)),
+    work,
+  ]);
 }
 
 /// Asymmetric on purpose: only a body that positively looks like markup is

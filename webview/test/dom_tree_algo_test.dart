@@ -398,8 +398,7 @@ void main() {
         'overlap almost pixel-for-pixel, a click near a tag\'s edge lands '
         'on the wrapper) produced values like "Action," with the '
         'separator baked in as if it were real data. Both mirrored by '
-        '_applyRows in lib/src/config_source.dart, which this simulates.',
-        () {
+        '_applyRows in lib/src/config_source.dart, which this simulates.', () {
       final html = '''
         <!doctype html><html><body>
           <ul class="details-list">
@@ -501,7 +500,12 @@ void main() {
       final dramaLink = tagsRow.querySelectorAll('a')[1];
       expect(dramaLink.text, 'Drama');
 
-      final seed = rowFieldSeed(doc, 'ul.details-list > li', 'strong', dramaLink);
+      final seed = rowFieldSeed(
+        doc,
+        'ul.details-list > li',
+        'strong',
+        dramaLink,
+      );
       expect(seed, isNotNull);
       expect(seed!.labelText, 'Tags(s):');
       expect(seed.valueSelector, isNotNull);

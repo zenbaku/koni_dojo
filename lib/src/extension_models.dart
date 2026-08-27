@@ -193,7 +193,8 @@ class SourceConfig implements AnySourceConfig {
     warmImageByUrl: json['warmImageByUrl'] as bool? ?? false,
     warmImageViaImgTag: json['warmImageViaImgTag'] as bool? ?? false,
     loginUrl: json['loginUrl'] as String? ?? '',
-    localStorageSeed: json['localStorageSeed'] as Map<String, dynamic>? ?? const {},
+    localStorageSeed:
+        json['localStorageSeed'] as Map<String, dynamic>? ?? const {},
     localStoragePreferences:
         (json['localStoragePreferences'] as List<dynamic>? ?? [])
             .map(
@@ -1239,8 +1240,7 @@ class DetailsConfig {
     if (bannerSelector.isNotEmpty) 'bannerSelector': bannerSelector,
     if (bannerSelector.isNotEmpty) 'bannerAttr': bannerAttr,
     if (banner != null) 'banner': [for (final step in banner!) step.toJson()],
-    if (backgroundSelector.isNotEmpty)
-      'backgroundSelector': backgroundSelector,
+    if (backgroundSelector.isNotEmpty) 'backgroundSelector': backgroundSelector,
     if (backgroundSelector.isNotEmpty) 'backgroundAttr': backgroundAttr,
     if (background != null)
       'background': [for (final step in background!) step.toJson()],

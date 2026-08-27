@@ -49,7 +49,10 @@ PageBodyKind classifyPageBody(Uint8List head) {
 /// bytes, so this can't shadow a real image.
 bool _looksLikeMarkup(Uint8List head) {
   var i = 0;
-  if (head.length >= 3 && head[0] == 0xEF && head[1] == 0xBB && head[2] == 0xBF) {
+  if (head.length >= 3 &&
+      head[0] == 0xEF &&
+      head[1] == 0xBB &&
+      head[2] == 0xBF) {
     i = 3;
   }
   while (i < head.length && _isWhitespace(head[i])) {
@@ -92,5 +95,18 @@ const List<_Signature> _signatures = [
   _Signature(4, [0x66, 0x74, 0x79, 0x70]), // "ftyp"
   _Signature(0, [0xFF, 0x0A]), // JXL, bare codestream
   // JXL in an ISOBMFF container: a 12-byte JXL signature box.
-  _Signature(0, [0x00, 0x00, 0x00, 0x0C, 0x4A, 0x58, 0x4C, 0x20, 0x0D, 0x0A, 0x87, 0x0A]),
+  _Signature(0, [
+    0x00,
+    0x00,
+    0x00,
+    0x0C,
+    0x4A,
+    0x58,
+    0x4C,
+    0x20,
+    0x0D,
+    0x0A,
+    0x87,
+    0x0A,
+  ]),
 ];

@@ -234,20 +234,23 @@ void main() {
     expect((await manager.fetchIndex(second)).single.pkg, isNotEmpty);
   });
 
-  test('removeRepo deletes a local repo\'s stored blob, not just the list entry', () async {
-    final id = await manager.addLocalRepo(
-      'repo.json',
-      Uint8List.fromList(utf8.encode(jsonEncode(_index))),
-    );
-    expect(storage.list('extensions/local-repos/'), completion(isNotEmpty));
+  test(
+    'removeRepo deletes a local repo\'s stored blob, not just the list entry',
+    () async {
+      final id = await manager.addLocalRepo(
+        'repo.json',
+        Uint8List.fromList(utf8.encode(jsonEncode(_index))),
+      );
+      expect(storage.list('extensions/local-repos/'), completion(isNotEmpty));
 
-    await manager.removeRepo(id);
+      await manager.removeRepo(id);
 
-    expect(await manager.loadRepos(), isEmpty);
-    expect(await storage.list('extensions/local-repos/'), isEmpty);
-    // Gone from storage, not just deregistered: re-fetching fails clearly.
-    await expectLater(manager.fetchIndex(id), throwsFormatException);
-  });
+      expect(await manager.loadRepos(), isEmpty);
+      expect(await storage.list('extensions/local-repos/'), isEmpty);
+      // Gone from storage, not just deregistered: re-fetching fails clearly.
+      await expectLater(manager.fetchIndex(id), throwsFormatException);
+    },
+  );
 
   test('fetchIndex parses entries and drops APK-only ones', () async {
     final extensions = await manager.fetchIndex(_repoUrl);
@@ -256,17 +259,20 @@ void main() {
     expect(extensions.single.sources.single.baseUrl, 'https://example.com');
   });
 
-  test('fetchIndex has no Authorization header when repoAuth is null', () async {
-    http.Request? captured;
-    final withRepoAuth = build(
-      client: MockClient((request) async {
-        captured = request;
-        return http.Response(jsonEncode(_index), 200);
-      }),
-    );
-    await withRepoAuth.fetchIndex(_repoUrl);
-    expect(captured!.headers.containsKey('Authorization'), false);
-  });
+  test(
+    'fetchIndex has no Authorization header when repoAuth is null',
+    () async {
+      http.Request? captured;
+      final withRepoAuth = build(
+        client: MockClient((request) async {
+          captured = request;
+          return http.Response(jsonEncode(_index), 200);
+        }),
+      );
+      await withRepoAuth.fetchIndex(_repoUrl);
+      expect(captured!.headers.containsKey('Authorization'), false);
+    },
+  );
 
   test('fetchIndex merges repoAuth headers and loads it first', () async {
     http.Request? captured;

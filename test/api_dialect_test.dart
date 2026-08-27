@@ -292,42 +292,39 @@ void main() {
     });
   });
 
-  test(
-    'fetchPages resolves a relative pages value against apiUrl, '
-    'leaving an absolute one untouched',
-    () async {
-      final cfg = ApiSourceConfig.fromJson({
-        'type': 'api',
-        'id': 'r',
-        'name': 'R',
-        'lang': 'en',
-        'baseUrl': 'https://r.example',
-        'apiUrl': 'https://api.r.example',
-        'popular': {'path': '/popular', 'items': 'data'},
-        'chapters': {'path': '/feed', 'items': 'data'},
-        'pages': {'path': '/c/{url}', 'items': 'images', 'template': '{value}'},
-      });
-      final source = apiSource(
-        cfg,
-        client: MockClient((req) async {
-          return http.Response(
-            jsonEncode({
-              'images': [
-                'uploads/series/x/01.jpg',
-                'https://cdn.other.example/x/02.jpg',
-              ],
-            }),
-            200,
-          );
-        }),
-      );
-      final pages = await source.pages(const ChapterRef('ch-1'));
-      expect(pages.map((p) => p.url.toString()), [
-        'https://api.r.example/uploads/series/x/01.jpg',
-        'https://cdn.other.example/x/02.jpg',
-      ]);
-    },
-  );
+  test('fetchPages resolves a relative pages value against apiUrl, '
+      'leaving an absolute one untouched', () async {
+    final cfg = ApiSourceConfig.fromJson({
+      'type': 'api',
+      'id': 'r',
+      'name': 'R',
+      'lang': 'en',
+      'baseUrl': 'https://r.example',
+      'apiUrl': 'https://api.r.example',
+      'popular': {'path': '/popular', 'items': 'data'},
+      'chapters': {'path': '/feed', 'items': 'data'},
+      'pages': {'path': '/c/{url}', 'items': 'images', 'template': '{value}'},
+    });
+    final source = apiSource(
+      cfg,
+      client: MockClient((req) async {
+        return http.Response(
+          jsonEncode({
+            'images': [
+              'uploads/series/x/01.jpg',
+              'https://cdn.other.example/x/02.jpg',
+            ],
+          }),
+          200,
+        );
+      }),
+    );
+    final pages = await source.pages(const ChapterRef('ch-1'));
+    expect(pages.map((p) => p.url.toString()), [
+      'https://api.r.example/uploads/series/x/01.jpg',
+      'https://cdn.other.example/x/02.jpg',
+    ]);
+  });
 
   test('descriptions containing HTML are normalized to plain text', () async {
     // Some API sources return the synopsis as HTML; the UI should show plain

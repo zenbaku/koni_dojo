@@ -43,16 +43,19 @@ void main() {
     },
   );
 
-  test('a missing field at the path reads as unofficial, not an error', () async {
-    final source = apiSource(
-      _config('isOfficial'),
-      client: _feed([
-        {'id': 'ch1', 'chapter': '1'},
-      ]),
-    );
-    final chapters = await source.chapters(const MangaRef('m'));
-    expect(chapters.single.official, isFalse);
-  });
+  test(
+    'a missing field at the path reads as unofficial, not an error',
+    () async {
+      final source = apiSource(
+        _config('isOfficial'),
+        client: _feed([
+          {'id': 'ch1', 'chapter': '1'},
+        ]),
+      );
+      final chapters = await source.chapters(const MangaRef('m'));
+      expect(chapters.single.official, isFalse);
+    },
+  );
 
   test('an empty official path (the default) never flags a chapter', () async {
     final source = apiSource(

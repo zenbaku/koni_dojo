@@ -25,8 +25,10 @@ import 'package:koni_dojo/koni_dojo.dart';
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
     print('usage: dart run tool/pipeline_live_probe.dart <blogger-base-url>');
-    print('  e.g. dart run tool/pipeline_live_probe.dart '
-        'https://example.blogspot.com');
+    print(
+      '  e.g. dart run tool/pipeline_live_probe.dart '
+      'https://example.blogspot.com',
+    );
     exit(2);
   }
   final base = args.first.replaceAll(RegExp(r'/+$'), '');

@@ -32,13 +32,12 @@ void main() {
     test('no declared preferences returns the seed unchanged', () {
       final config = _config(
         localStorageSeed: {
-          'filterPreferences': {'matureContent': {'acceptErotic': true}},
+          'filterPreferences': {
+            'matureContent': {'acceptErotic': true},
+          },
         },
       );
-      expect(
-        effectiveLocalStorageSeed(config, null),
-        config.localStorageSeed,
-      );
+      expect(effectiveLocalStorageSeed(config, null), config.localStorageSeed);
     });
 
     test('a declared preference with no store falls back to its default', () {
@@ -58,15 +57,9 @@ void main() {
         ],
       );
       final seed = effectiveLocalStorageSeed(config, null);
-      expect(
-        seed['filterPreferences']['matureContent']['acceptGore'],
-        false,
-      );
+      expect(seed['filterPreferences']['matureContent']['acceptGore'], false);
       // Untouched sibling values survive the patch.
-      expect(
-        seed['filterPreferences']['matureContent']['acceptErotic'],
-        true,
-      );
+      expect(seed['filterPreferences']['matureContent']['acceptErotic'], true);
     });
 
     test('a store override wins over both the default and the base seed '
@@ -148,19 +141,16 @@ void main() {
         config,
         _FakeStore({'acceptGore': true}),
       );
-      expect(
-        first['filterPreferences']['matureContent']['acceptGore'],
-        true,
-      );
+      expect(first['filterPreferences']['matureContent']['acceptGore'], true);
       // The config's own seed (and the local `baseSeed` it was built from)
       // must be untouched by that patch.
       expect(
-        config.localStorageSeed['filterPreferences']['matureContent']['acceptGore'],
+        config
+            .localStorageSeed['filterPreferences']['matureContent']['acceptGore'],
         false,
       );
       expect(
-        (baseSeed['filterPreferences']['matureContent']
-            as Map)['acceptGore'],
+        (baseSeed['filterPreferences']['matureContent'] as Map)['acceptGore'],
         false,
       );
 
@@ -168,16 +158,10 @@ void main() {
         config,
         _FakeStore({'acceptGore': false}),
       );
-      expect(
-        second['filterPreferences']['matureContent']['acceptGore'],
-        false,
-      );
+      expect(second['filterPreferences']['matureContent']['acceptGore'], false);
       // The first call's result must not have been retroactively mutated by
       // the second call sharing the same config.
-      expect(
-        first['filterPreferences']['matureContent']['acceptGore'],
-        true,
-      );
+      expect(first['filterPreferences']['matureContent']['acceptGore'], true);
     });
 
     test('multiple preferences patch independently, including different '

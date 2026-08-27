@@ -898,7 +898,10 @@ typedef _PendingRelative = ({
 /// or a blank submit — the caller decides what, if anything, blank should
 /// mean explicitly (e.g. rows' dedicated "Whole row text" button, not
 /// this dialog).
-Future<String?> _promptSelectorDialog(BuildContext context, String current) async {
+Future<String?> _promptSelectorDialog(
+  BuildContext context,
+  String current,
+) async {
   final controller = TextEditingController(text: current);
   final result = await showDialog<String>(
     context: context,
@@ -2889,7 +2892,9 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
     if (doc == null) return null;
     if (_lastTreeClick != null) return _lastTreeClick;
     final selector =
-        _pendingItem?.selector ?? _pendingRelative?.selector ?? committedSelector;
+        _pendingItem?.selector ??
+        _pendingRelative?.selector ??
+        committedSelector;
     if (selector == null) return null;
     return doc.querySelector(selector);
   }
@@ -2908,7 +2913,9 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
   /// one-off snippet here) specifically so `picker-algo.test.js` covers it
   /// under jsdom rather than this only ever being exercised by hand against
   /// a live page. Returns a proposal — never mutates `_rows`.
-  Future<({String? containerSelector, String? labelText, String? valueSelector})?>
+  Future<
+    ({String? containerSelector, String? labelText, String? valueSelector})?
+  >
   _seedRowCandidateFromLiveClick() async {
     final controller = _controller;
     if (controller == null) return null;
@@ -2995,14 +3002,24 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
         _ArmedFlatField(:final field) => _picked[field.key],
         _ => null,
       };
-      final el = _representativeElementFor(committedSelector: committedSelector);
+      final el = _representativeElementFor(
+        committedSelector: committedSelector,
+      );
       if (el == null) return _failRowsDetection(rowsField);
       containerSelector =
           _rows.itemSelector ??
-          guessRowContainer(doc, el, labelSelector: _rows.labelSelector)
-              ?.selector;
+          guessRowContainer(
+            doc,
+            el,
+            labelSelector: _rows.labelSelector,
+          )?.selector;
       if (containerSelector == null) return _failRowsDetection(rowsField);
-      final seed = rowFieldSeed(doc, containerSelector, _rows.labelSelector, el);
+      final seed = rowFieldSeed(
+        doc,
+        containerSelector,
+        _rows.labelSelector,
+        el,
+      );
       if (seed == null) return _failRowsDetection(rowsField);
       labelText = seed.labelText;
       valueSelector = seed.valueSelector;
@@ -3115,11 +3132,15 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
     };
     final draft = rowsField == null ? null : _rows.fields[rowsField];
     return _ArmSnapshot(
-      flatSelector: target is _ArmedFlatField ? _picked[target.field.key] : null,
+      flatSelector: target is _ArmedFlatField
+          ? _picked[target.field.key]
+          : null,
       flatAttr: target is _ArmedFlatField && target.field.attr.isNotEmpty
           ? _picked[target.field.attrKey]
           : null,
-      flatPreview: target is _ArmedFlatField ? _previews[target.field.key] : null,
+      flatPreview: target is _ArmedFlatField
+          ? _previews[target.field.key]
+          : null,
       rowsItemSelector: _rows.itemSelector,
       rowsLabelSelector: _rows.labelSelector,
       rowsFieldDraft: draft == null
@@ -3616,7 +3637,9 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
     final fieldLabel = _armedFieldLabel;
     final mode = _armedMode;
     final rowsField = _armedRowsField;
-    final rowsSection = rowsField == null ? null : _rowsSection(theme, rowsField);
+    final rowsSection = rowsField == null
+        ? null
+        : _rowsSection(theme, rowsField);
     if (mode == StepMode.item) {
       final pending = _pendingItem;
       return Padding(
@@ -3757,7 +3780,11 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
     return null;
   }
 
-  Widget _rowsCard(ThemeData theme, {required Widget child, bool error = false}) {
+  Widget _rowsCard(
+    ThemeData theme, {
+    required Widget child,
+    bool error = false,
+  }) {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -3802,14 +3829,16 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
               runSpacing: 4,
               children: [
                 FilledButton(
-                  onPressed: () => _commitRowsDetection(detection, replace: false),
+                  onPressed: () =>
+                      _commitRowsDetection(detection, replace: false),
                   child: Text(
                     'Add "${detection.labelText}" too — '
                     '${detection.previewIfAdded.rowsWithValue} total',
                   ),
                 ),
                 OutlinedButton(
-                  onPressed: () => _commitRowsDetection(detection, replace: true),
+                  onPressed: () =>
+                      _commitRowsDetection(detection, replace: true),
                   child: Text('Replace with "${detection.labelText}"'),
                 ),
                 TextButton(
@@ -3882,7 +3911,9 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
       if (draft.valueSelector.isEmpty && detection.valueSelector != null) {
         draft.valueSelector = detection.valueSelector!;
       }
-      final sim = replace ? detection.previewIfReplaced : detection.previewIfAdded;
+      final sim = replace
+          ? detection.previewIfReplaced
+          : detection.previewIfAdded;
       _previews['rows.${detection.rowsField.configKey}'] = sim.preview;
       _rowsDetection = null;
     });
@@ -4011,9 +4042,8 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
             'Row',
             _rows.itemSelector ?? '(not yet set)',
             editValue: _rows.itemSelector ?? '',
-            onApply: (v) => setState(
-              () => _rows.itemSelector = v.isEmpty ? null : v,
-            ),
+            onApply: (v) =>
+                setState(() => _rows.itemSelector = v.isEmpty ? null : v),
           ),
           selectorRow(
             'Label',
@@ -4031,11 +4061,14 @@ class _DetailsPickerDialogState extends State<_DetailsPickerDialog>
                 : draft.valueSelector,
             editValue: draft?.valueSelector ?? '',
             onApply: (v) => setState(
-              () => (_rows.fields[rowsField] ??= _RowFieldDraft()).valueSelector = v,
+              () =>
+                  (_rows.fields[rowsField] ??= _RowFieldDraft()).valueSelector =
+                      v,
             ),
             trailing: TextButton(
               onPressed: () => setState(() {
-                (_rows.fields[rowsField] ??= _RowFieldDraft()).valueSelector = '';
+                (_rows.fields[rowsField] ??= _RowFieldDraft()).valueSelector =
+                    '';
               }),
               child: const Text('Whole row text'),
             ),

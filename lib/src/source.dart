@@ -487,6 +487,7 @@ class Source {
   final void Function(ClearanceStore?)? _clearanceSink;
   final void Function(LocalStoragePreferenceStore?)?
   _localStoragePreferenceSink;
+
   /// Transport for [imageBytes]. Optional so a hand-composed Source stays
   /// cheap to build; one is created on first use when absent, because a
   /// Source that can't fetch its own images would be an incomplete value and

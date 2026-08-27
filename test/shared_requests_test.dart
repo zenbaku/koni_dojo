@@ -58,11 +58,9 @@ void main() {
 
     expect(result.$1.title, 'A Series');
     expect(result.$2, hasLength(2), reason: 'the shared body must still parse');
-    expect(
-      requested,
-      ['/manga/one'],
-      reason: 'the same page was fetched twice for one screen',
-    );
+    expect(requested, [
+      '/manga/one',
+    ], reason: 'the same page was fetched twice for one screen');
   });
 
   test('a later scope refetches, so a refresh is never stale', () async {
@@ -79,7 +77,8 @@ void main() {
     expect(
       requested,
       ['/manga/one', '/manga/one'],
-      reason: 'sharing leaked past the scope that opened it — a refresh would '
+      reason:
+          'sharing leaked past the scope that opened it — a refresh would '
           'answer with a stale page',
     );
   });
@@ -92,15 +91,18 @@ void main() {
     expect(requested, ['/manga/one', '/manga/one']);
   });
 
-  test('nesting is refcounted: an inner scope does not end the outer', () async {
-    final source = build();
-    final ref = MangaRef('/manga/one');
+  test(
+    'nesting is refcounted: an inner scope does not end the outer',
+    () async {
+      final source = build();
+      final ref = MangaRef('/manga/one');
 
-    await source.withSharedRequests(() async {
-      await source.withSharedRequests(() async => source.details(ref));
-      await source.chapters(ref);
-    });
+      await source.withSharedRequests(() async {
+        await source.withSharedRequests(() async => source.details(ref));
+        await source.chapters(ref);
+      });
 
-    expect(requested, ['/manga/one']);
-  });
+      expect(requested, ['/manga/one']);
+    },
+  );
 }

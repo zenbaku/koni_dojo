@@ -139,7 +139,8 @@ void main() {
       expect(
         config.webview,
         isTrue,
-        reason: 'capability gating asks "does this source need a renderer at '
+        reason:
+            'capability gating asks "does this source need a renderer at '
             'all" — a narrowed source still does, and a build without one '
             'must still refuse before the request',
       );
@@ -249,7 +250,8 @@ void main() {
       expect(
         result.$2,
         hasLength(2),
-        reason: 'sharing handed chapters the un-rendered body — the exact '
+        reason:
+            'sharing handed chapters the un-rendered body — the exact '
             'failure `webview: [chapters]` exists to prevent',
       );
       expect(fetched, ['/manga/one'], reason: 'details went out plain');
@@ -268,7 +270,8 @@ void main() {
       expect(
         fetcher.rendered,
         ['/manga/one'],
-        reason: 'same URL, same transport — splitting the share key by '
+        reason:
+            'same URL, same transport — splitting the share key by '
             'transport must not split it by operation',
       );
     });
@@ -306,32 +309,37 @@ void main() {
       expect(
         fetched,
         isEmpty,
-        reason: 'a plain HTTP client is behind the wall — narrowing must not '
+        reason:
+            'a plain HTTP client is behind the wall — narrowing must not '
             'move native onto it',
       );
       expect(fetcher.rendered, hasLength(2));
     });
 
-    test('a browser-session client renders only the script-built ones', () async {
-      final source = build(
-        ['chapters'],
-        challengesPlainClients: true,
-        clientIsBrowserSession: true,
-      );
+    test(
+      'a browser-session client renders only the script-built ones',
+      () async {
+        final source = build(
+          ['chapters'],
+          challengesPlainClients: true,
+          clientIsBrowserSession: true,
+        );
 
-      await source.popular(1);
-      final pages = await source.pages(ChapterRef('/read/1'));
-      await source.chapters(MangaRef('/manga/one'));
+        await source.popular(1);
+        final pages = await source.pages(ChapterRef('/read/1'));
+        await source.chapters(MangaRef('/manga/one'));
 
-      expect(pages, hasLength(2));
-      expect(
-        fetcher.rendered,
-        ['/manga/one'],
-        reason: 'only the chapter list is script-built; the wall is already '
-            'behind this client',
-      );
-      expect(fetched, ['/p', '/read/1']);
-    });
+        expect(pages, hasLength(2));
+        expect(
+          fetcher.rendered,
+          ['/manga/one'],
+          reason:
+              'only the chapter list is script-built; the wall is already '
+              'behind this client',
+        );
+        expect(fetched, ['/p', '/read/1']);
+      },
+    );
 
     test('a browser session does not excuse script-built content', () async {
       final source = build(
@@ -345,7 +353,8 @@ void main() {
       expect(
         fetcher.rendered,
         ['/manga/one'],
-        reason: 'no session, however good, puts content in a response that '
+        reason:
+            'no session, however good, puts content in a response that '
             'never carried it',
       );
     });
@@ -374,7 +383,8 @@ void main() {
       expect(
         json.containsKey('challengesPlainClients'),
         isFalse,
-        reason: 'true is what `webview: true` already implies; writing it out '
+        reason:
+            'true is what `webview: true` already implies; writing it out '
             'again is noise a rebuilt index would carry forever',
       );
     });
@@ -388,7 +398,8 @@ void main() {
       expect(
         parse(json).challengesPlainClients,
         isFalse,
-        reason: 'the exception to the default has to survive a round trip, or '
+        reason:
+            'the exception to the default has to survive a round trip, or '
             'a rebuild of the index silently re-walls the source',
       );
     });
@@ -477,22 +488,29 @@ void main() {
       );
     }
 
-    test('it takes the HTTP client even on a full `webview: true` source', () async {
-      final source = jsonChapters();
-      final chapters = await source.chapters(
-        MangaRef('https://example.test/manga/one-piece'),
-      );
+    test(
+      'it takes the HTTP client even on a full `webview: true` source',
+      () async {
+        final source = jsonChapters();
+        final chapters = await source.chapters(
+          MangaRef('https://example.test/manga/one-piece'),
+        );
 
-      expect(chapters, hasLength(1));
-      expect(chapters.single.url, 'https://example.test/manga/one-piece/chapter-1');
-      expect(
-        fetcher.rendered,
-        isEmpty,
-        reason: 'rendered, this would have returned the JSON wrapped in '
-            '<html><body><pre> and the decoder would have thrown',
-      );
-      expect(fetched, ['https://example.test/api/manga/one-piece/chapters']);
-    });
+        expect(chapters, hasLength(1));
+        expect(
+          chapters.single.url,
+          'https://example.test/manga/one-piece/chapter-1',
+        );
+        expect(
+          fetcher.rendered,
+          isEmpty,
+          reason:
+              'rendered, this would have returned the JSON wrapped in '
+              '<html><body><pre> and the decoder would have thrown',
+        );
+        expect(fetched, ['https://example.test/api/manga/one-piece/chapters']);
+      },
+    );
 
     test('and the whole chapter list costs exactly one request', () async {
       /* The step that derives the slug has no `request`, so it fetches
@@ -504,31 +522,34 @@ void main() {
     });
   });
 
-  test('with no renderer on this build, everything falls back to HTTP', () async {
-    fetched = [];
-    final source = htmlSource(
-      SourceConfig.fromJson({
-        'id': 'f',
-        'name': 'F',
-        'baseUrl': 'https://example.test',
-        'webview': true,
-        'webviewOps': ['chapters'],
-        'popular': {'path': '/p', 'itemSelector': 'a'},
-        'chapters': {
-          'itemSelector': 'li.chapter',
-          'nameSelector': 'a',
-          'urlSelector': 'a',
-          'urlAttr': 'href',
-        },
-        'pages': {'imageSelector': '.pages img'},
-      }),
-      client: MockClient((request) async {
-        fetched.add(request.url.path);
-        return http.Response(_fetched, 200);
-      }),
-    );
+  test(
+    'with no renderer on this build, everything falls back to HTTP',
+    () async {
+      fetched = [];
+      final source = htmlSource(
+        SourceConfig.fromJson({
+          'id': 'f',
+          'name': 'F',
+          'baseUrl': 'https://example.test',
+          'webview': true,
+          'webviewOps': ['chapters'],
+          'popular': {'path': '/p', 'itemSelector': 'a'},
+          'chapters': {
+            'itemSelector': 'li.chapter',
+            'nameSelector': 'a',
+            'urlSelector': 'a',
+            'urlAttr': 'href',
+          },
+          'pages': {'imageSelector': '.pages img'},
+        }),
+        client: MockClient((request) async {
+          fetched.add(request.url.path);
+          return http.Response(_fetched, 200);
+        }),
+      );
 
-    await source.chapters(MangaRef('/manga/one'));
-    expect(fetched, ['/manga/one']);
-  });
+      await source.chapters(MangaRef('/manga/one'));
+      expect(fetched, ['/manga/one']);
+    },
+  );
 }

@@ -182,8 +182,14 @@ void main() {
           pipeline,
           {'baseUrl': 'https://s.example', 'mangaUrl': 'https://s.example/m'},
           baseUrl: 'https://s.example',
-          fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) =>
-              serve(
+          fetch:
+              (
+                url, {
+                method = 'GET',
+                body = '',
+                headers = const {},
+                document = true,
+              }) => serve(
                 '<ul>'
                 '<li class="chapter"><a href="/m/ch-2">Chapter 2</a></li>'
                 '<li class="chapter"><a href="/m/ch-1">Chapter 1</a></li>'
@@ -228,8 +234,14 @@ void main() {
           pipeline,
           const {'baseUrl': 'https://s.example'},
           baseUrl: 'https://s.example',
-          fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) =>
-              serve('<div class="item"><img src="/c-small.jpg"></div>'),
+          fetch:
+              (
+                url, {
+                method = 'GET',
+                body = '',
+                headers = const {},
+                document = true,
+              }) => serve('<div class="item"><img src="/c-small.jpg"></div>'),
         );
         expect(result.records.single['cover'], '/c-normal.jpg');
       },
@@ -253,8 +265,14 @@ void main() {
         pipeline,
         const {'baseUrl': 'https://s.example'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) =>
-            serve('{"data":[{"id":"a1","attributes":{"title":"One"}}]}'),
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) => serve('{"data":[{"id":"a1","attributes":{"title":"One"}}]}'),
       );
       expect(result.records.single, {'url': 'a1', 'name': 'One'});
     });
@@ -300,13 +318,20 @@ void main() {
             'mangaUrl': 'https://s.example/manga/kingdom',
           },
           baseUrl: 'https://s.example',
-          fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) {
-            expect(url, 'https://s.example/api/comics/kingdom/chapters');
-            return serve(
-              '{"data":{"chapters":[{"chapter_slug":"chapter-1",'
-              '"chapter_name":"Chapter 1"}]}}',
-            );
-          },
+          fetch:
+              (
+                url, {
+                method = 'GET',
+                body = '',
+                headers = const {},
+                document = true,
+              }) {
+                expect(url, 'https://s.example/api/comics/kingdom/chapters');
+                return serve(
+                  '{"data":{"chapters":[{"chapter_slug":"chapter-1",'
+                  '"chapter_name":"Chapter 1"}]}}',
+                );
+              },
         );
         expect(result.records.single, {
           'url': 'https://s.example/manga/kingdom/chapter-1',
@@ -353,11 +378,18 @@ void main() {
           pipeline,
           const {'baseUrl': 'https://s.example'},
           baseUrl: 'https://s.example',
-          fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) {
-            requested.add(url);
-            final page = Uri.parse(url).queryParameters['page']!;
-            return serve(pages[page]!);
-          },
+          fetch:
+              (
+                url, {
+                method = 'GET',
+                body = '',
+                headers = const {},
+                document = true,
+              }) {
+                requested.add(url);
+                final page = Uri.parse(url).queryParameters['page']!;
+                return serve(pages[page]!);
+              },
         );
         expect(requested, [
           'https://s.example/api?page=1',
@@ -395,12 +427,19 @@ void main() {
         pipeline,
         const {'baseUrl': 'https://s.example'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) {
-          calls++;
-          return serve(
-            '{"chapters":[{"n":"x"}],"current_page":1,"last_page":99}',
-          );
-        },
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) {
+              calls++;
+              return serve(
+                '{"chapters":[{"n":"x"}],"current_page":1,"last_page":99}',
+              );
+            },
       );
       expect(calls, 3);
       expect(result.records, hasLength(3));
@@ -421,8 +460,14 @@ void main() {
         pipeline,
         const {'baseUrl': 'https://s.example'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) =>
-            serve('{"chapters":{"1":{"id":"c1"},"2":{"id":"c2"}}}'),
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) => serve('{"chapters":{"1":{"id":"c1"},"2":{"id":"c2"}}}'),
       );
       expect(result.records.map((r) => r['url']), ['c1', 'c2']);
     });
@@ -442,8 +487,14 @@ void main() {
         pipeline,
         const {'baseUrl': 'https://s.example'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) =>
-            serve(html),
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) => serve(html),
       );
       final withNext = await run(
         '<div class="item"><a href="/m">M</a></div><a class="next">»</a>',
@@ -470,13 +521,20 @@ void main() {
           pipeline,
           {'baseUrl': 'https://s.example', 'mangaUrl': 'https://s.example/m'},
           baseUrl: 'https://s.example',
-          fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) {
-            requested.add(url);
-            if (url.endsWith('/m')) {
-              return serve('<div id="x" data-id="42"></div>');
-            }
-            return serve('<h1>Real</h1>');
-          },
+          fetch:
+              (
+                url, {
+                method = 'GET',
+                body = '',
+                headers = const {},
+                document = true,
+              }) {
+                requested.add(url);
+                if (url.endsWith('/m')) {
+                  return serve('<div id="x" data-id="42"></div>');
+                }
+                return serve('<h1>Real</h1>');
+              },
         );
         expect(requested, ['https://s.example/m', 'https://s.example/real/42']);
         expect(body, '<h1>Real</h1>');
@@ -505,13 +563,20 @@ void main() {
           'mangaUrl': 'https://api.example/manga/x',
         },
         baseUrl: 'https://api.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) {
-          requested.add(url);
-          if (url.endsWith('/manga/x')) {
-            return serve('{"result":{"id":"777"}}');
-          }
-          return serve('{"pages":["a.jpg","b.jpg"]}');
-        },
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) {
+              requested.add(url);
+              if (url.endsWith('/manga/x')) {
+                return serve('{"result":{"id":"777"}}');
+              }
+              return serve('{"pages":["a.jpg","b.jpg"]}');
+            },
       );
       expect(requested, [
         'https://api.example/manga/x',
@@ -548,13 +613,20 @@ void main() {
         pipeline,
         {'baseUrl': 'https://s.example', 'mangaUrl': 'https://s.example/m'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) {
-          requested.add(url);
-          if (url.endsWith('/m')) {
-            return serve('<div id="w" data-label="BEN 10"></div>');
-          }
-          return serve('{"entry":[{"title":"c1"}]}');
-        },
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) {
+              requested.add(url);
+              if (url.endsWith('/m')) {
+                return serve('<div id="w" data-label="BEN 10"></div>');
+              }
+              return serve('{"entry":[{"title":"c1"}]}');
+            },
       );
       expect(requested[1], 'https://s.example/feeds/-/BEN%2010');
       expect(result.records.single['name'], 'c1');
@@ -664,8 +736,14 @@ void main() {
           'chapterId': '42',
         },
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
-            '<div id="reader" data-pages="3">reader</div>',
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async => '<div id="reader" data-pages="3">reader</div>',
       );
       expect(pages, [
         'https://s.example/ch/42/1.jpg',
@@ -698,8 +776,14 @@ void main() {
           'chapterUrl': 'https://s.example/ch/x',
         },
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
-            '<script>{"pageCount":3}</script>',
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async => '<script>{"pageCount":3}</script>',
       );
       expect(pages, [
         'https://s.example/c/p0001.jpg',
@@ -727,10 +811,19 @@ void main() {
           'chapterUrl': 'https://s.example/ch/x',
         },
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
-            '<script>{"pageCount":2}</script>',
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async => '<script>{"pageCount":2}</script>',
       );
-      expect(pages, ['https://s.example/p999.jpg', 'https://s.example/p1000.jpg']);
+      expect(pages, [
+        'https://s.example/p999.jpg',
+        'https://s.example/p1000.jpg',
+      ]);
     });
 
     test('no `pad` leaves every existing config untouched', () async {
@@ -750,8 +843,14 @@ void main() {
           'chapterUrl': 'https://s.example/ch/x',
         },
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
-            '<script>{"pageCount":2}</script>',
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async => '<script>{"pageCount":2}</script>',
       );
       expect(pages, ['https://s.example/p1.jpg', 'https://s.example/p2.jpg']);
     });
@@ -772,8 +871,14 @@ void main() {
         pipeline,
         const {'baseUrl': 'https://s.example'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
-            '{"pages":2}',
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async => '{"pages":2}',
       );
       expect(pages, [
         'https://s.example/p/0.webp',
@@ -811,11 +916,18 @@ void main() {
         pipeline,
         const {'baseUrl': 'https://s.example'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async {
-          requested.add(url);
-          final page = Uri.parse(url).queryParameters['page']!;
-          return pages[page]!;
-        },
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async {
+              requested.add(url);
+              final page = Uri.parse(url).queryParameters['page']!;
+              return pages[page]!;
+            },
       );
       expect(requested, [
         'https://s.example/album?page=1',
@@ -847,10 +959,17 @@ void main() {
         pipeline,
         const {'baseUrl': 'https://s.example'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async {
-          calls++;
-          return '<img class="pic" src="/p/x.jpg"><a rel="next" href="?page=2"></a>';
-        },
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async {
+              calls++;
+              return '<img class="pic" src="/p/x.jpg"><a rel="next" href="?page=2"></a>';
+            },
       );
       expect(calls, 3);
       expect(result, hasLength(3));
@@ -916,11 +1035,18 @@ void main() {
           'chapterUrl': 'https://jm.example/manga/x/chapter-1/',
         },
         baseUrl: 'https://jm.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async {
-          expect(url, 'https://jm.example/manga/x/chapter-1/');
-          return "<script>var chapter_data='$dataJson';"
-              "var nonce='$password';</script>";
-        },
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async {
+              expect(url, 'https://jm.example/manga/x/chapter-1/');
+              return "<script>var chapter_data='$dataJson';"
+                  "var nonce='$password';</script>";
+            },
       );
 
       expect(pages, urls);
@@ -949,8 +1075,14 @@ void main() {
           pipeline,
           {'baseUrl': 'https://s.example', 'mangaUrl': 'https://s.example/m'},
           baseUrl: 'https://s.example',
-          fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
-              url.endsWith('/m')
+          fetch:
+              (
+                url, {
+                method = 'GET',
+                body = '',
+                headers = const {},
+                document = true,
+              }) async => url.endsWith('/m')
               ? '<div id="x" data-id="9"></div>'
               : '<li><a href="/c1">C1</a></li>',
         ),
@@ -977,8 +1109,14 @@ void main() {
         ]),
         {'baseUrl': 'https://s.example', 'chapterUrl': 'https://s.example/c'},
         baseUrl: 'https://s.example',
-        fetch: (url, {method = 'GET', body = '', headers = const {}, document = true}) async =>
-            '<img src="/p1.jpg">',
+        fetch:
+            (
+              url, {
+              method = 'GET',
+              body = '',
+              headers = const {},
+              document = true,
+            }) async => '<img src="/p1.jpg">',
       );
       expect(pages, ['https://s.example/p1.jpg']);
     });

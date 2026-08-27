@@ -10,7 +10,8 @@ import 'package:http/testing.dart';
 import 'package:koni_dojo/koni_dojo.dart';
 import 'package:test/test.dart';
 
-String _grid(int n, {bool withNextButton = false}) => '''
+String _grid(int n, {bool withNextButton = false}) =>
+    '''
 <html><body>
   <div class="list">
     ${List.generate(n, (i) => '<div class="item"><a href="/s/\$i">T\$i</a></div>').join()}
@@ -41,8 +42,10 @@ Source build({
     'chapters': {'itemSelector': 'li'},
     'pages': {'imageSelector': 'img'},
   }),
-  client: MockClient((_) async =>
-      http.Response(_grid(itemsPerPage, withNextButton: withNextButton), 200)),
+  client: MockClient(
+    (_) async =>
+        http.Response(_grid(itemsPerPage, withNextButton: withNextButton), 200),
+  ),
 );
 
 void main() {

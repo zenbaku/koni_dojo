@@ -34,45 +34,42 @@ void main() {
         entry.key,
   };
 
-  test(
-    'every boolean top-level field in the schema has a switch in the form '
-    '(an optional flag that defaults to false is omitted from the JSON '
-    'entirely, so it needs an explicit always-visible switch — a generic '
-    "fallback over the JSON's present keys would never surface it)",
-    () {
-      final booleans = {
-        ...booleanProperties(defs('sourceConfig')),
-        ...booleanProperties(defs('apiSourceConfig')),
-      };
-      expect(
-        booleans.difference(sourceCardKnownFields),
-        isEmpty,
-        reason:
-            'add a switch for these in ConfigForm._sourceCard (see how '
-            'webview/warmImageByUrl/js are wired) and add them to '
-            'sourceCardKnownFields',
-      );
-    },
-  );
+  test('every boolean top-level field in the schema has a switch in the form '
+      '(an optional flag that defaults to false is omitted from the JSON '
+      'entirely, so it needs an explicit always-visible switch — a generic '
+      "fallback over the JSON's present keys would never surface it)", () {
+    final booleans = {
+      ...booleanProperties(defs('sourceConfig')),
+      ...booleanProperties(defs('apiSourceConfig')),
+    };
+    expect(
+      booleans.difference(sourceCardKnownFields),
+      isEmpty,
+      reason:
+          'add a switch for these in ConfigForm._sourceCard (see how '
+          'webview/warmImageByUrl/js are wired) and add them to '
+          'sourceCardKnownFields',
+    );
+  });
 
-  test(
-    "sourceCardKnownFields doesn't carry a stale entry — every field it "
-    'claims to handle is a real top-level property on at least one dialect '
-    "(the schema is ground truth for what exists; a name that's drifted "
-    "away from a renamed/removed model field would otherwise silently hide "
-    'a JSON key from the form with no widget actually rendering it)',
-    () {
-      final allProps = {...defs('sourceConfig').keys, ...defs('apiSourceConfig').keys};
-      expect(
-        sourceCardKnownFields.difference(allProps),
-        isEmpty,
-        reason:
-            'these are in ConfigForm.sourceCardKnownFields but not in the '
-            'schema — either the schema is missing them, or the form is '
-            'silently swallowing a field that no longer exists',
-      );
-    },
-  );
+  test("sourceCardKnownFields doesn't carry a stale entry — every field it "
+      'claims to handle is a real top-level property on at least one dialect '
+      "(the schema is ground truth for what exists; a name that's drifted "
+      "away from a renamed/removed model field would otherwise silently hide "
+      'a JSON key from the form with no widget actually rendering it)', () {
+    final allProps = {
+      ...defs('sourceConfig').keys,
+      ...defs('apiSourceConfig').keys,
+    };
+    expect(
+      sourceCardKnownFields.difference(allProps),
+      isEmpty,
+      reason:
+          'these are in ConfigForm.sourceCardKnownFields but not in the '
+          'schema — either the schema is missing them, or the form is '
+          'silently swallowing a field that no longer exists',
+    );
+  });
   group('webviewOps', () {
     /* The drift guard above only reaches *boolean* top-level fields, and this
      * one is an array — so nothing in the schema cross-check would notice if

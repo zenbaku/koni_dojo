@@ -48,10 +48,9 @@ void main() {
     // stamping (which `tool/build_repo.dart`'s own live run already proves).
     Map<String, Object?> byPkg(List entries) => {
       for (final e in entries)
-        (e as Map)['pkg'] as String:
-            (Map<String, dynamic>.from(e)
-              ..remove('version')
-              ..remove('updatedAt')),
+        (e as Map)['pkg'] as String: (Map<String, dynamic>.from(e)
+          ..remove('version')
+          ..remove('updatedAt')),
     };
     expect(byPkg(published), byPkg(expected));
   });

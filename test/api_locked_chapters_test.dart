@@ -29,17 +29,20 @@ http.Client _feed(List<Map<String, Object?>> data) =>
     MockClient((req) async => http.Response(jsonEncode({'data': data}), 200));
 
 void main() {
-  test('a boolean flag (e.g. "premium": true) marks a chapter locked', () async {
-    final source = apiSource(
-      _config('premium'),
-      client: _feed([
-        {'id': 'ch1', 'chapter': '1', 'premium': false},
-        {'id': 'ch2', 'chapter': '2', 'premium': true},
-      ]),
-    );
-    final chapters = await source.chapters(const MangaRef('m'));
-    expect(chapters.map((c) => c.locked).toList(), [false, true]);
-  });
+  test(
+    'a boolean flag (e.g. "premium": true) marks a chapter locked',
+    () async {
+      final source = apiSource(
+        _config('premium'),
+        client: _feed([
+          {'id': 'ch1', 'chapter': '1', 'premium': false},
+          {'id': 'ch2', 'chapter': '2', 'premium': true},
+        ]),
+      );
+      final chapters = await source.chapters(const MangaRef('m'));
+      expect(chapters.map((c) => c.locked).toList(), [false, true]);
+    },
+  );
 
   test('a price field is truthy above zero, falsy at zero', () async {
     final source = apiSource(
@@ -76,9 +79,7 @@ void main() {
   });
 
   test('ApiChapterSpec.locked survives a JSON round trip', () {
-    final restored = ApiSourceConfig.fromJson(
-      _config('premium').toJson(),
-    );
+    final restored = ApiSourceConfig.fromJson(_config('premium').toJson());
     expect(restored.chapters.chapter.locked, 'premium');
   });
 }

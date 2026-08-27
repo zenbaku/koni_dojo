@@ -225,7 +225,10 @@ class ExtensionManager {
   /// dash, used both as the local repo's storage path and (via
   /// [localRepoLabel]) its display fallback.
   String _slugify(String fileName) {
-    final base = fileName.replaceAll(RegExp(r'\.json$', caseSensitive: false), '');
+    final base = fileName.replaceAll(
+      RegExp(r'\.json$', caseSensitive: false),
+      '',
+    );
     final slug = base.replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '-');
     return slug.isEmpty ? 'file' : slug;
   }
@@ -354,18 +357,19 @@ class ExtensionManager {
 
   /// The engine matching [config]'s dialect, wired to the shared Cloudflare
   /// clearance store so a solved challenge replays on its requests.
-  Source buildSource(AnySourceConfig config) => (switch (config) {
-    ApiSourceConfig c => apiSource(c, client: client),
-    SourceConfig c => htmlSource(
-      c,
-      client: client,
-      webViewFetcher: _webView,
-      jsRunner: _js,
-      clientIsBrowserSession: clientIsBrowserSession,
-    ),
-  })
-    ..clearanceStore = clearance
-    ..localStoragePreferenceStore = localStoragePreferences;
+  Source buildSource(AnySourceConfig config) =>
+      (switch (config) {
+          ApiSourceConfig c => apiSource(c, client: client),
+          SourceConfig c => htmlSource(
+            c,
+            client: client,
+            webViewFetcher: _webView,
+            jsRunner: _js,
+            clientIsBrowserSession: clientIsBrowserSession,
+          ),
+        })
+        ..clearanceStore = clearance
+        ..localStoragePreferenceStore = localStoragePreferences;
 
   /// All usable sources: every source of every installed extension, de-duped
   /// by id, all driven by the same declarative engines. Nothing is bundled:

@@ -464,8 +464,7 @@ class _HtmlEngine {
      * full final page there must not override it.
      */
     final total = result.meta['total'];
-    final pageIsFull =
-        listing.pageSize > 0 && items.length >= listing.pageSize;
+    final pageIsFull = listing.pageSize > 0 && items.length >= listing.pageSize;
     final hasNext = total != null && total.isNotEmpty && listing.pageSize > 0
         ? page * listing.pageSize < (int.tryParse(total) ?? 0)
         : listing.nextPageSelector.isEmpty && listing.steps == null
