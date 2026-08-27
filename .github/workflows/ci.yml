@@ -16,6 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
+        with:
+          # Pinned to match local dev (the Dart bundled with Flutter 3.44.6),
+          # and pinned *because* of the format gate below. `dart format`'s
+          # output changes between SDK releases, so a floating `stable` turns
+          # every Dart release into a red build on a repo nobody touched —
+          # which is exactly what happened the first time this gate ran.
+          # Bump deliberately, with the local toolchain, re-running the
+          # formatter in the same commit.
+          sdk: '3.12.2'
       - run: dart pub get
       # Repo-wide, so the Flutter sub-packages are gated here too rather than
       # each needing its own step: `dart format` needs no Flutter SDK, and
