@@ -443,12 +443,33 @@ class _HtmlEngine {
         ),
       );
     }
-    // has-next: a count-based feed (meta `total`, e.g. a Blogger
-    // openSearch$totalResults) compares against the page window; otherwise a
-    // presence flag (meta `hasNext`, e.g. a next-page button).
+    /* has-next, in three shapes, because sites answer the question three ways.
+     *
+     * A count-based feed (meta `total`, e.g. a Blogger openSearch$totalResults)
+     * compares against the page window. A presence flag (meta `hasNext`, from
+     * a next-page button) is the ordinary case.
+     *
+     * And then there is the site with neither: pagination is infinite scroll,
+     * so the markup carries no next-page control at all — live or raw — while
+     * `?page=N` works perfectly server-side. Nothing to select means every
+     * such listing stops at page one, which is not "no more results", it is
+     * the engine having no way to ask.
+     *
+     * A full page is the answer there: exactly [ListingConfig.pageSize] items
+     * means the page was capped rather than exhausted. It self-terminates —
+     * a short page ends it, and a last page that happens to be exactly full
+     * costs one extra request that comes back empty. Opt-in, since it needs
+     * `pageSize`, and only consulted when the config offers no selector: a
+     * site that *does* have a next-page control has already answered, and a
+     * full final page there must not override it.
+     */
     final total = result.meta['total'];
+    final pageIsFull =
+        listing.pageSize > 0 && items.length >= listing.pageSize;
     final hasNext = total != null && total.isNotEmpty && listing.pageSize > 0
         ? page * listing.pageSize < (int.tryParse(total) ?? 0)
+        : listing.nextPageSelector.isEmpty && listing.steps == null
+        ? pageIsFull
         : result.meta['hasNext'] == '1';
     return CatalogPage(items: items, hasNextPage: hasNext);
   }

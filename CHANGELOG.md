@@ -46,6 +46,18 @@ breaking, so this classifies as a MINOR release when cut.
   can now legitimately want different bodies — a plain body must never satisfy
   an operation that was narrowed to `webview` because a plain body is not
   enough.
+- **A listing with no `nextPageSelector` paginates on `pageSize`**: a page
+  returning exactly that many items was capped rather than exhausted, so
+  another follows.
+
+  For the site whose pagination is infinite scroll — no next-page control in
+  the markup at all, live or raw, while `?page=N` works server-side. Such a
+  listing could only ever return its first page, which the app shows as "no
+  more results" rather than "the engine had no way to ask". Opt-in (it needs
+  `pageSize`), self-terminating (a short page ends the walk), and inert for any
+  listing that declares a selector — that site has already answered, and its
+  last page is allowed to be exactly full.
+
 - **`pad` on the generate shape**: zero-pads `{n}` to a fixed width, for a host
   that names its files `p0001.jpg` and will not answer `p1.jpg`.
 

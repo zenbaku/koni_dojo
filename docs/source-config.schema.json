@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zenbaku.github.io/koni_dojo/source-config.schema.json",
-  "x-engineVersion": "0.3.1",
+  "x-engineVersion": "0.3.2",
   "title": "Dojo extension file",
   "description": "An extensions/*.json file: one extension's metadata plus its source(s). Mirrors lib/src/extension_models.dart (the authoritative model) and docs/extensions.md (the prose walkthrough). x-engineVersion is the koni_dojo package version (see pubspec.yaml) this schema was last verified against — bump both together whenever the schema's shape changes; test/schema_sync_test.dart checks this file's properties against every config class's actual toJson() field set, so a Dart-side field with no matching schema entry (or vice versa) fails the test suite instead of silently shipping.",
   "type": "object",
@@ -315,7 +315,7 @@
           "type": "string",
           "description": "{page}, {offset} (= (page-1)*pageSize) and {query} are substituted. Empty only when steps supplies the extraction. For tag, {query} substitutes the first included value and is path-segment escaped (spaces as %20) rather than query-string escaped (spaces as +), since a tag value there typically sits in the URL path itself."
         },
-        "pageSize": { "type": "integer", "description": "Items per page, used only to compute {offset}." },
+        "pageSize": { "type": "integer", "description": "Items per page. Computes {offset} for offset-paginated endpoints, and — when the listing declares no nextPageSelector — decides whether another page follows: a page returning exactly this many items was capped rather than exhausted. That second use is how an infinite-scroll site paginates at all, since its markup carries no next-page control to select while ?page=N works server-side. Self-terminating: a short page ends the walk, and a last page that happens to be exactly full costs one empty request." },
         "queryReplace": { "$ref": "#/$defs/valueRewrite" },
         "queryMap": {
           "$ref": "#/$defs/stringMap",

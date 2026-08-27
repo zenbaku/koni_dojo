@@ -187,6 +187,17 @@ lifted from Mihon extension source need care:
 
 `{offset}` is replaced with `(page - 1) * pageSize`.
 
+`pageSize` also answers **"is there another page"** for a listing with no
+`nextPageSelector`. Some sites paginate by infinite scroll: there is no
+next-page control in the markup at all, live or raw, while `?page=N` works
+perfectly server-side — so a config that can only look for a selector stops at
+page one, which reads as "no more results" rather than "nothing here can ask".
+A page returning exactly `pageSize` items was capped rather than exhausted, so
+another follows. It self-terminates (a short page ends the walk; a last page
+that happens to be exactly full costs one empty request), it is opt-in, and a
+listing that *does* declare a `nextPageSelector` keeps using it — that site has
+already answered, and its last page is allowed to be full.
+
 ### Rate limiting
 
 ```json
