@@ -22,6 +22,10 @@ it technically could break code that imported it directly.
 - **`AnySourceConfig`** / **`SourceConfig`** / **`ApiSourceConfig`**: the
   parsed config models, for anything that reads config fields directly (the
   Extensions UI, the config editor).
+- **`SourceOp`**: the closed set of operations a config describes, as
+  `SourceConfig.webviewOps` names them. A contract because an editor has to
+  *enumerate* it — offering the operations a source can narrow rendering to
+  means iterating the enum, not guessing at strings.
 
 ## The source facade
 

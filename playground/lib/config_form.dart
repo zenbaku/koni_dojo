@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
+import 'package:koni_dojo/koni_dojo.dart' show SourceOp;
 
 import 'json_view.dart';
 
@@ -54,6 +55,8 @@ const sourceCardKnownFields = {
   'baseUrl',
   'apiUrl',
   'webview',
+  'webviewOps',
+  'challengesPlainClients',
   'warmImageByUrl',
   'warmImageViaImgTag',
   'js',
@@ -282,7 +285,31 @@ class _ConfigFormState extends State<ConfigForm> {
       padding: const EdgeInsets.all(12),
       children: [
         _sourceCard(theme, source),
-        if (source['rateLimit'] is Map) _rateLimitCard(theme, source),
+        if (source['rateLimit'] is Map)
+          _rateLimitCard(
+            theme,
+            source,
+            'rateLimit',
+            title: 'Rate limit',
+            hint:
+                'A promise to the site. Listings, search, details, chapter '
+                'lists and page lists queue behind it; images deliberately do '
+                'not.',
+          ),
+        if (source['imageRateLimit'] is Map)
+          _rateLimitCard(
+            theme,
+            source,
+            'imageRateLimit',
+            title: 'Image rate limit',
+            hint:
+                'Rarely wanted. Images take a concurrency cap with no '
+                'spacing, because a minimum gap between requests never lets a '
+                'phone\'s radio drop out of its high-power state — measured, '
+                'four preloaded pages went 6415 ms spaced to 288 ms capped for '
+                'identical bytes. Set this only for a CDN that counts requests '
+                'per second and answers 429.',
+          ),
         for (final key in operationKeys)
           if (source[key] is Map)
             _operationSection(theme, key, (source[key] as Map).cast()),
@@ -291,7 +318,7 @@ class _ConfigFormState extends State<ConfigForm> {
   }
 
   Widget _sourceCard(ThemeData theme, Map<String, dynamic> source) {
-    final elsewhere = {...operationKeys, 'rateLimit'};
+    final elsewhere = {...operationKeys, 'rateLimit', 'imageRateLimit'};
     final remaining = [
       for (final k in source.keys)
         if (!elsewhere.contains(k) && !sourceCardKnownFields.contains(k)) k,
@@ -319,7 +346,22 @@ class _ConfigFormState extends State<ConfigForm> {
             _sourceSwitch(
               source,
               'webview',
-              'WebView (route requests through WKWebView)',
+              'WebView (route requests through a real browser)',
+              subtitle:
+                  'Leave this on and narrow below rather than turning it '
+                  'off: an engine older than webviewOps parses this key with '
+                  'a hard cast and drops the whole extension when it is not '
+                  'a boolean.',
+            ),
+            _webviewOpsField(theme, source),
+            _sourceSwitch(
+              source,
+              'challengesPlainClients',
+              'Host refuses a non-browser client',
+              subtitle:
+                  'Implied by "WebView" on its own. Set it explicitly when '
+                  'narrowing, or the operations just moved onto the HTTP '
+                  'client land on a wall that 403s them.',
             ),
             _sourceSwitch(
               source,
@@ -353,23 +395,23 @@ class _ConfigFormState extends State<ConfigForm> {
   /// A bool switch for a top-level source field that's *omitted* from the
   /// JSON at its default (false). Unlike `_opField`'s bool branch, which
   /// only runs for a key already present, this one has to work from absence.
-  Widget _sourceSwitch(Map<String, dynamic> source, String key, String label) {
-    /* `webview` is a bool *or* a list of operation names. A list is on, and
-     * stays a list: reading it as `== true` would show a narrowed config as
-     * off, and writing `true` over it would widen it back to every request —
-     * silently undoing the narrowing just by opening the form. */
-    final value = source[key];
-    final narrowed = value is List && value.isNotEmpty;
+  Widget _sourceSwitch(
+    Map<String, dynamic> source,
+    String key,
+    String label, {
+    String? subtitle,
+  }) {
     return SwitchListTile(
       contentPadding: EdgeInsets.zero,
       dense: true,
-      title: Text(narrowed ? '$label — ${value.join(', ')}' : label),
-      value: value == true || narrowed,
+      title: Text(label),
+      subtitle: subtitle == null ? null : Text(subtitle),
+      value: source[key] == true,
       onChanged: (v) {
-        if (!v) {
-          source.remove(key);
-        } else if (!narrowed) {
+        if (v) {
           source[key] = true;
+        } else {
+          source.remove(key);
         }
         _emit();
         setState(() {});
@@ -377,8 +419,98 @@ class _ConfigFormState extends State<ConfigForm> {
     );
   }
 
-  Widget _rateLimitCard(ThemeData theme, Map<String, dynamic> source) {
-    final rl = (source['rateLimit'] as Map).cast<String, dynamic>();
+  /// `webviewOps` — *which* operations need a rendered DOM, where `webview`
+  /// says only that some do.
+  ///
+  /// Three states, and the empty list is not the absent one: absent means
+  /// "whatever `webview` said" (all of them, when it is true), while `[]` is a
+  /// real answer — nothing here needs a browser, though the host may still
+  /// wall a plain client. A bare row of chips expresses two of those three, so
+  /// the switch owns whether the key is there and the chips own what is in it.
+  ///
+  /// Worth a dedicated widget rather than the raw-JSON fallback: narrowing
+  /// this is the difference between a browser page load on the reading path
+  /// and none, and an editor that makes the fast shape hard to type is an
+  /// editor for the slow one.
+  Widget _webviewOpsField(ThemeData theme, Map<String, dynamic> source) {
+    final raw = source['webviewOps'];
+    final narrowed = raw is List;
+    final ops = narrowed ? {for (final o in raw) '$o'} : const <String>{};
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: const Text('Narrow to specific operations (webviewOps)'),
+          subtitle: Text(
+            narrowed
+                ? (ops.isEmpty
+                      ? 'None: no operation needs a rendered DOM. Leave '
+                            '"WebView" on anyway if the host still walls a '
+                            'plain client.'
+                      : 'Only these are rendered; everything else uses the '
+                            'HTTP client.')
+                : 'Off: every operation is rendered when "WebView" is on.',
+          ),
+          value: narrowed,
+          onChanged: (v) {
+            if (v) {
+              source['webviewOps'] = <String>[];
+            } else {
+              source.remove('webviewOps');
+            }
+            _emit();
+            setState(() {});
+          },
+        ),
+        if (narrowed)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 2,
+              children: [
+                for (final op in SourceOp.values)
+                  FilterChip(
+                    label: Text(op.name),
+                    visualDensity: VisualDensity.compact,
+                    selected: ops.contains(op.name),
+                    onSelected: (on) {
+                      final next = {...ops};
+                      if (on) {
+                        next.add(op.name);
+                      } else {
+                        next.remove(op.name);
+                      }
+                      // Written in the enum's own order, not tap order, so
+                      // reopening the form doesn't reshuffle the JSON.
+                      source['webviewOps'] = [
+                        for (final o in SourceOp.values)
+                          if (next.contains(o.name)) o.name,
+                      ];
+                      _emit();
+                      setState(() {});
+                    },
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  /// One `{requests, perMs}` block. Two keys use it and they mean opposite
+  /// things, so [title] and [hint] carry which is which rather than leaving
+  /// two identical cards side by side.
+  Widget _rateLimitCard(
+    ThemeData theme,
+    Map<String, dynamic> source,
+    String key, {
+    required String title,
+    String? hint,
+  }) {
+    final rl = (source[key] as Map).cast<String, dynamic>();
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -386,13 +518,22 @@ class _ConfigFormState extends State<ConfigForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Rate limit', style: theme.textTheme.titleSmall),
+            Text(title, style: theme.textTheme.titleSmall),
+            if (hint != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                hint,
+                style: theme.textTheme.bodySmall!.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: _numberField(
-                    path: 'rl.requests',
+                    path: '$key.requests',
                     label: 'Requests',
                     value: '${rl['requests'] ?? ''}',
                     onChanged: (n) {
@@ -404,7 +545,7 @@ class _ConfigFormState extends State<ConfigForm> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: _numberField(
-                    path: 'rl.perMs',
+                    path: '$key.perMs',
                     label: 'per ms',
                     value: '${rl['perMs'] ?? ''}',
                     onChanged: (n) {

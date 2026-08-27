@@ -30,6 +30,23 @@ void _expectKeysDeclared(Set<String> actual, Set<String> declared, String label)
         '$label produced keys not declared in the schema: $missing — update '
         'docs/source-config.schema.json (bump x-engineVersion too).',
   );
+  /* And the other way, which is the direction that actually failed: the
+   * fixtures below are hand-written, so a field nobody remembered to set is a
+   * field this test never sees — `imageRateLimit` shipped in a published config
+   * the schema rejected (`additionalProperties: false`) with this suite green.
+   * Requiring every declared property to be *exercised* is what keeps the
+   * fixtures honest: a new schema entry fails here until something sets it, and
+   * a config author's editor stops disagreeing with the engine. */
+  final unexercised = declared.difference(actual);
+  expect(
+    unexercised,
+    isEmpty,
+    reason:
+        'the schema declares properties $label never produced: $unexercised — '
+        'either the field is gone (delete it from the schema) or this test\'s '
+        'fixture does not set it, in which case nothing is checking that the '
+        'schema and the model agree about it.',
+  );
 }
 
 void main() {
@@ -46,6 +63,11 @@ void main() {
         baseUrl: 'https://x.example',
         icon: 'data:image/png;base64,',
         webview: true,
+        // Narrowed, and disagreeing with `webview`, because `toJson` omits
+        // both when they say nothing new — a fixture at the defaults would
+        // exercise neither.
+        webviewOps: {SourceOp.chapters},
+        challengesPlainClients: false,
         warmImageByUrl: true,
         warmImageViaImgTag: true,
         loginUrl: 'https://x.example/login',
@@ -61,6 +83,7 @@ void main() {
         js: true,
         headers: {'Referer': 'https://x.example/'},
         rateLimit: RateLimitConfig(requests: 1, perMs: 1000),
+        imageRateLimit: RateLimitConfig(requests: 3, perMs: 1000),
         popular: ListingConfig(itemSelector: '.item'),
         latest: ListingConfig(itemSelector: '.item'),
         search: ListingConfig(itemSelector: '.item'),
@@ -92,6 +115,7 @@ void main() {
         headers: {'Referer': 'https://x.example/'},
         imageHeaders: {'Referer': 'https://x.example/'},
         rateLimit: RateLimitConfig(requests: 1, perMs: 1000),
+        imageRateLimit: RateLimitConfig(requests: 3, perMs: 1000),
         popular: ApiListingConfig(path: '/popular'),
         search: ApiListingConfig(path: '/search'),
         tag: ApiListingConfig(path: '/tag'),

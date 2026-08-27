@@ -135,18 +135,23 @@ Future<List<FilterGroup>> loadTagFilterGroups(String configText) async {
 typedef WebviewSuggestion = ({String reason});
 
 /// Fetches [url] two ways — a plain HTTP GET and a real WebView render
-/// (waits for client-side JS to settle, the exact same path
-/// `SourceConfig.webview: true` sources use in production, see
-/// `_HtmlEngine._fetchBody` in `config_source.dart`) — and compares them
-/// for a mismatch worth flagging *before* anyone starts hand-picking
-/// selectors against the wrong one. Two signals, either enough on its own:
-/// the plain fetch failing outright (many JS-hydrated/Cloudflare-gated
-/// sites do exactly this), or the WebView-rendered document having
-/// substantially more elements than the static one — a selector-agnostic
-/// proxy for "this page's real content only exists after JS runs", usable
-/// before any selector has been picked at all. Null when they look
-/// comparable, when the WebView side itself fails (nothing to compare
-/// against), or when this platform can't drive a WebView at all
+/// (waits for client-side JS to settle, the exact same path a rendered
+/// operation uses in production, see `_HtmlEngine._fetchBody` in
+/// `config_source.dart`) — and compares them for a mismatch worth flagging
+/// *before* anyone starts hand-picking selectors against the wrong one.
+///
+/// **Its two signals are the engine's two fields**, which is why the advice
+/// names them separately rather than reaching for one switch. A plain fetch
+/// that fails while the browser succeeds is a *transport* answer — the host
+/// refuses a non-browser client (`challengesPlainClients`) — and says nothing
+/// about whether any content needs rendering. A rendered document with
+/// substantially more elements is a *content* answer (`webviewOps`): this page
+/// is built by its own script. They are independent, and conflating them is
+/// expensive in one direction: a host that merely walls plain clients, told to
+/// render, pays a browser page load per request for nothing.
+///
+/// Null when they look comparable, when the WebView side itself fails (nothing
+/// to compare against), or when this platform can't drive a WebView at all
 /// ([cloudflareSolveSupported]).
 Future<WebviewSuggestion?> diagnoseWebviewNeed(Uri url) async {
   final fetcher = playgroundWebViewFetcher();
@@ -187,7 +192,11 @@ Future<WebviewSuggestion?> diagnoseWebviewNeed(Uri url) async {
     return (
       reason:
           'The plain fetch failed, but the browser loaded the page fine — '
-          'this site likely needs "webview: true".',
+          'this host refuses a client that is not a real browser session. '
+          'That is a wall, not a rendering problem: set "webview": true '
+          '(which implies challengesPlainClients), and if it turns out no '
+          'operation needs a rendered DOM, narrow it with "webviewOps": [] '
+          'and set "challengesPlainClients": true explicitly.',
     );
   }
 
@@ -196,8 +205,12 @@ Future<WebviewSuggestion?> diagnoseWebviewNeed(Uri url) async {
   return (
     reason:
         'The browser rendered ${comparison.webviewCount} elements here; '
-        'the plain fetch only saw ${comparison.plainCount} — this site '
-        'likely needs "webview: true" to scrape correctly.',
+        'the plain fetch only saw ${comparison.plainCount} — this page\'s '
+        'content only exists after its own script runs. Set "webview": true, '
+        'then narrow "webviewOps" to the operations that actually need it. '
+        'This was measured on one page, so it says nothing about the chapter '
+        'list or the reader, and every operation left rendering costs a whole '
+        'browser page load on a path that may not need one.',
   );
 }
 

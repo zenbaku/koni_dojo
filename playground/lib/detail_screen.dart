@@ -412,8 +412,10 @@ class _DetailScreenState extends State<DetailScreen> {
         });
   }
 
-  /// Kicks off a background check for whether this source might need
-  /// `webview: true` (see `diagnoseWebviewNeed`'s doc) — once per
+  /// Kicks off a background check for whether this source needs a browser at
+  /// all, and if so for which of the two reasons (see `diagnoseWebviewNeed`'s
+  /// doc: a walled transport and script-built content are different answers
+  /// with different fields) — once per
   /// screen-open, matching [_maybeLoadTagFilters]/[_maybeLoadSearchFilters]'s
   /// pattern. Only while the config still looks like a fresh, unconfigured
   /// scaffold (blank `popular`, `webview` not already on) and this platform

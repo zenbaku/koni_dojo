@@ -88,8 +88,15 @@ void main() {
       '${Directory.systemTemp.createTempSync('pg_state').path}/state.json',
     );
     debugStatePathOverride = f.path;
+    /* And no headless browser. Nothing in these tests is about one, but the
+     * detail screen starts a plain-vs-rendered comparison the moment a source
+     * is scaffolded from a URL — and a fetch that fails on a dead channel
+     * still arms the fetcher's one-minute idle-release timer, which fails the
+     * test when the tree is disposed before it fires. */
+    debugWebViewFetcherFactory = () => null;
     addTearDown(() {
       debugStatePathOverride = null;
+      debugWebViewFetcherFactory = null;
       if (f.parent.existsSync()) f.parent.deleteSync(recursive: true);
     });
   });

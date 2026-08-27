@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:konimanga_playground/config_form.dart';
 
@@ -72,4 +73,147 @@ void main() {
       );
     },
   );
+  group('webviewOps', () {
+    /* The drift guard above only reaches *boolean* top-level fields, and this
+     * one is an array — so nothing in the schema cross-check would notice if
+     * the control stopped working. It matters more than most: the difference
+     * between an operation that renders and one that doesn't is a whole
+     * browser page load, and the editor is where that gets typed. */
+    String config({String? webviewOps}) => jsonEncode({
+      'id': 'x',
+      'name': 'X',
+      'baseUrl': 'https://example.test',
+      'webview': true,
+      if (webviewOps != null) 'webviewOps': jsonDecode(webviewOps),
+      'popular': {'path': '/p', 'itemSelector': 'a'},
+      'chapters': {'itemSelector': 'li'},
+      'pages': {'imageSelector': 'img'},
+    });
+
+    Future<String?> mount(WidgetTester tester, String text) async {
+      String? emitted;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ConfigForm(text: text, onChanged: (v) => emitted = v),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return emitted;
+    }
+
+    Map<String, dynamic> sourceOf(String json) =>
+        jsonDecode(json) as Map<String, dynamic>;
+
+    testWidgets('absent is off, and shows no chips to mistake for an answer', (
+      tester,
+    ) async {
+      await mount(tester, config());
+      expect(
+        find.text('Narrow to specific operations (webviewOps)'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.ancestor(
+                of: find.text('Narrow to specific operations (webviewOps)'),
+                matching: find.byType(SwitchListTile),
+              ),
+            )
+            .value,
+        isFalse,
+      );
+      expect(find.byType(FilterChip), findsNothing);
+    });
+
+    testWidgets('an empty list is a real answer, not the absent one', (
+      tester,
+    ) async {
+      /* `[]` says no operation needs a rendered DOM — which is the shape that
+       * took a real source off the render tab entirely. A control that could
+       * not tell it from an absent key would round-trip it back to "render
+       * everything" just by opening the form. */
+      await mount(tester, config(webviewOps: '[]'));
+      expect(find.byType(FilterChip), findsWidgets);
+      expect(
+        tester
+            .widgetList<FilterChip>(find.byType(FilterChip))
+            .where((c) => c.selected),
+        isEmpty,
+      );
+    });
+
+    testWidgets('a named operation shows selected, and stays named', (
+      tester,
+    ) async {
+      await mount(tester, config(webviewOps: '["chapters"]'));
+      final selected = tester
+          .widgetList<FilterChip>(find.byType(FilterChip))
+          .where((c) => c.selected)
+          .map((c) => (c.label as Text).data)
+          .toList();
+      expect(selected, ['chapters']);
+    });
+
+    testWidgets('turning it on writes an empty list, not a bare true', (
+      tester,
+    ) async {
+      /* `webview` stays a boolean for old engines and the narrowing rides in
+       * its own key. An engine that predates webviewOps parses `webview` with
+       * a hard cast and drops the whole extension when it is not a bool, so
+       * the editor writing the wrong shape is silent breakage downstream. */
+      String? emitted;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ConfigForm(text: config(), onChanged: (v) => emitted = v),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.ancestor(
+          of: find.text('Narrow to specific operations (webviewOps)'),
+          matching: find.byType(SwitchListTile),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(sourceOf(emitted!)['webviewOps'], isEmpty);
+      expect(sourceOf(emitted!)['webview'], isTrue);
+    });
+
+    testWidgets('picking chips writes them in the enum\'s order', (
+      tester,
+    ) async {
+      String? emitted;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ConfigForm(
+              text: config(webviewOps: '[]'),
+              onChanged: (v) => emitted = v,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tapped out of order on purpose: the JSON must not reshuffle itself
+      // between edits just because of the order they were clicked.
+      await tester.tap(find.widgetWithText(FilterChip, 'pages'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilterChip, 'chapters'));
+      await tester.pumpAndSettle();
+
+      expect(sourceOf(emitted!)['webviewOps'], ['chapters', 'pages']);
+      expect(
+        sourceOf(emitted!)['webview'],
+        isTrue,
+        reason: 'narrowing must not turn the boolean off',
+      );
+    });
+  });
 }

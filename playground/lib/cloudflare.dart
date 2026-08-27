@@ -133,7 +133,19 @@ Future<void> ensureClearanceLoaded() async {
   );
 }
 
-WebViewFetcher? playgroundWebViewFetcher() => cfw.createWebViewFetcher();
+/// Replaces the WebView fetcher, for tests.
+///
+/// A fetcher is a real headless browser, and under `flutter_test` its platform
+/// channel never answers — but it still *arms* things. Every `fetchHtml` leaves
+/// a one-minute idle-release timer behind (the WebView is expensive to launch,
+/// so it is kept warm between fetches), and a pending timer fails any widget
+/// test whose tree is disposed before it fires. A test that isn't about the
+/// browser returns null here and never starts one.
+@visibleForTesting
+WebViewFetcher? Function()? debugWebViewFetcherFactory;
+
+WebViewFetcher? playgroundWebViewFetcher() =>
+    (debugWebViewFetcherFactory ?? cfw.createWebViewFetcher)();
 
 /// Clears a Cloudflare challenge for [url]'s host and captures the clearance
 /// into [playgroundClearance]: a thin persistence wrapper over

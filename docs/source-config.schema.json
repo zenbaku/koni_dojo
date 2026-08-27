@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zenbaku.github.io/koni_dojo/source-config.schema.json",
-  "x-engineVersion": "0.3.2",
+  "x-engineVersion": "0.3.3",
   "title": "Dojo extension file",
   "description": "An extensions/*.json file: one extension's metadata plus its source(s). Mirrors lib/src/extension_models.dart (the authoritative model) and docs/extensions.md (the prose walkthrough). x-engineVersion is the koni_dojo package version (see pubspec.yaml) this schema was last verified against — bump both together whenever the schema's shape changes; test/schema_sync_test.dart checks this file's properties against every config class's actual toJson() field set, so a Dart-side field with no matching schema entry (or vice versa) fails the test suite instead of silently shipping.",
   "type": "object",
@@ -112,6 +112,10 @@
         },
         "headers": { "$ref": "#/$defs/stringMap" },
         "rateLimit": { "$ref": "#/$defs/rateLimit" },
+        "imageRateLimit": {
+          "$ref": "#/$defs/rateLimit",
+          "description": "How fast this source's *images* may be fetched. Almost never set, and rateLimit deliberately does not cover them: rateLimit is a promise to the site, while page and cover images take a concurrency cap with no spacing at all. The reason is measured, not stylistic — a minimum gap between requests never lets a phone's radio drop out of its high-power state, and on one real source four preloaded pages took 6415 ms spaced against 288 ms capped, for identical bytes. Set this only for a CDN that genuinely counts requests per second and answers 429."
+        },
         "popular": { "$ref": "#/$defs/listing" },
         "latest": { "$ref": "#/$defs/listing" },
         "search": { "$ref": "#/$defs/listing" },
@@ -149,6 +153,10 @@
           "description": "Headers for fetching covers and pages; API CDNs usually need none."
         },
         "rateLimit": { "$ref": "#/$defs/rateLimit" },
+        "imageRateLimit": {
+          "$ref": "#/$defs/rateLimit",
+          "description": "How fast this source's *images* may be fetched. Almost never set, and rateLimit deliberately does not cover them: rateLimit is a promise to the site, while page and cover images take a concurrency cap with no spacing at all. The reason is measured, not stylistic — a minimum gap between requests never lets a phone's radio drop out of its high-power state, and on one real source four preloaded pages took 6415 ms spaced against 288 ms capped, for identical bytes. Set this only for a CDN that genuinely counts requests per second and answers 429."
+        },
         "manga": { "$ref": "#/$defs/apiMangaSpec" },
         "popular": { "$ref": "#/$defs/apiListing" },
         "search": { "$ref": "#/$defs/apiListing" },

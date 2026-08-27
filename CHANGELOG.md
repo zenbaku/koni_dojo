@@ -84,6 +84,25 @@ breaking, so this classifies as a MINOR release when cut.
   chapter list is one request and needs no browser anywhere. Measured live
   through the shipped config with a plain HTTP client: **1377 chapters in
   1146 ms**, against two browser page loads before.
+- **`SourceConfig.imageRateLimit`**, and images no longer queue behind
+  `rateLimit`. A config's rate limit is a promise to the *site*: listings,
+  search, details, chapter lists and page lists still space themselves behind
+  it, while cover and page images take a concurrency cap (3) with no spacing
+  at all. The reason is measured rather than stylistic — a minimum gap between
+  requests issues one every second or two for a whole reading session, which
+  never lets a phone's radio drop out of its high-power state; four preloaded
+  pages took 6415 ms spaced and 288 ms capped, for identical bytes. It is also
+  where a native background downloader already stood for the very same CDN
+  fetches, so the reader was the outlier. `imageRateLimit` is the per-source
+  escape hatch for a CDN that genuinely counts requests per second.
+
+  Landed earlier in this cycle without its entry here or in
+  `docs/source-config.schema.json`, which the schema forbids unknown keys
+  in — so a published config using it was one the schema called invalid.
+  Both are fixed, and `test/schema_sync_test.dart` now checks the *other*
+  direction too (every declared property must be exercised by a fixture),
+  which is the gap that let it through with the suite green. Schema
+  `x-engineVersion` 0.3.3.
 - **`SourceConfig.challengesPlainClients`**, and the `clientIsBrowserSession`
   argument to `htmlSource`/`ExtensionManager`. A bare `webview: true` meant
   two things at once — "this content is script-built" and "this host refuses
